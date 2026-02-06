@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Element List</title>
+</head>
+<body>
+   // ul > li //querySelectorAll - can get array like node list
+
+    <ul>
+        <li>Item One</li>
+        <li>Item Two</li>
+        <li>Item Three</li>
+        <li>Item Four</li>
+    </ul>
+
+   <script>
+       // let items = document.querySelectorAll("ul > li");
+       //
+       // items.forEach(li => li.textContent = "Updated " + li.textContent);
+
+       let fruits = ["Apple", "Banana", "Mango"];
+       let ul = document.querySelector("ul")
+
+       fruits.map(fruit => {
+           let li = document.createElement("li")
+           li.textContent = fruit;
+           ul.appendChild(li)
+       })
+
+   </script>
+</body>
+</html>

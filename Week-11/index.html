@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dom Properties & Methods</title>
+</head>
+<body>
+    <div id="box">
+        An Element.
+    </div>
+
+    <p>
+        Some Content <b id="badge">10</b>
+    </p>
+<!--    <div id="box1">-->
+<!--        Box One Content-->
+<!--    </div>-->
+<!--    <div id="box2">-->
+<!--        Box Two Content-->
+<!--    </div>-->
+
+    <script>
+        // document.querySelector("#box1").textContent = "Hello <b>DOM</b>"
+        // document.querySelector("#box2").innerHTML = "Hello <b>DOM</b>"
+
+        // let hello = document.createTextNode("Hello DOM. This is created using createTextNode method.")
+        // document.querySelector("#box").appendChild(hello)
+
+        //appendChild method to add an element
+        // let hello = document.createElement("b")
+        // hello.textContent = "Hello, World!"
+        // document.querySelector("#box").appendChild(hello)
+
+
+        //insertBefore method to add an element
+        // let hello = document.createElement("b")
+        // hello.textContent = "Hello, World!"
+        // let div = document.querySelector("#box")
+        // div.insertBefore(hello, div.firstChild) //lastChild for last Element Node, firstChild for first Element Node
+
+        //remove method to remove an element
+        // document.querySelector("div").remove()
+
+        //setAttribute method to set an attribute
+        // let hello = document.createElement("b")
+        //
+        // hello.textContent = "Hello, World!"
+        // hello.setAttribute("title", "A new element") //getAttribute to get an attribute, //removeAttribute to remove an attribute
+        // document.querySelector("div").appendChild(hello)
+
+        //class - setAttribute, getAttribute, removeAttribute
+        //classList - add(), remove(), toggle(), contains()
+
+        // let hello = document.createElement("b")
+        // hello.textContent = "Hello, World!"
+        // hello.classList.add("alert", "info") //add multiple classes
+        //
+        // //classList.remove(), classList.toggle()
+        //
+        // document.querySelector("div").appendChild(hello)
+        //
+        // //cloneNode method to clone an element
+        // let hi = hello.cloneNode(true) //true for deep clone, false for shallow clone
+        // hi.textContent = "Hi, Universe!"
+        // document.querySelector("div").appendChild(hi)
+
+        let p = document.querySelector("#badge").parentNode
+        console.log(p)
+
+    </script>
+</body>
+</html>

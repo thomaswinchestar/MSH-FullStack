@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Events</title>
+</head>
+<body>
+    <p id="note">
+        hello world
+    </p>
+    <button>Click Me</button>
+
+    <script>
+        // HTML Event Handler Attribute
+        // function hello() {
+        //     document.querySelector("#note").textContent = "Button Clicked!";
+        // }
+
+        // DOM Level 2 Event Listener
+        // document.querySelector("button").addEventListener("click", e => {
+        //     console.log(e)
+        //     document.querySelector("#note").textContent = "Button Clicked using addEventListener!";
+        // });
+
+        // Event Handler Properties (onclick, onmouseover, onmouseout, onkeydown, onkeyup, onkeypress, etc.)
+        document.querySelector("button").onclick = function(e) {
+            document.querySelector("#note").textContent = "Button Clicked using onclick property!";
+        };
+    </script>
+</body>
+</html>

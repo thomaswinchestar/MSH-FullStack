@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <form>
+        <label for="inputField">Character Count: 0</label><br>
+        <input type="text" id="inputField" name="inputField">
+    </form>
+
+
+    <script>
+        console.log("JS is running");
+        document.querySelector('input').onkeyup = function() {
+            console.log("Key up event detected");
+            let count = document.querySelector('input').value.length;
+            if (count) {
+                console.log("Inside if Block")
+                document.querySelector('label').textContent = count;
+            }
+        }
+
+        console.info("Script loaded successfully");
+        console.warn("This is a warning message");
+        console.error("This is an error message");
+
+        console.table({
+            name: "Alice",
+            age: 30,
+            city: "New York"
+        });
+
+        function sampleFunction() {
+            console.trace("Trace message for debugging");
+            anotherFunction();
+        }
+
+        function anotherFunction() {
+            console.trace("Trace message for debugging");
+        }
+
+        sampleFunction();
+        anotherFunction();
+
+
+        console.time("Loop Time");
+        for (let i = 0; i < 100000; i++) {
+            // Simulating a time-consuming task
+            Math.sqrt(i);
+        }
+        console.timeEnd("Loop Time");
+    </script>
+</body>
+
+</html>

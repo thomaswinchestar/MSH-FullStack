@@ -33,4 +33,29 @@
 //echo "</br>";
 //print_r($vals);
 
-//sort()
+//sort() - array value sorting
+//rsort() - reverse array sorting
+//ksort() - index array sorting
+//krsort() - index array reverse sorting
+
+//$users = ["tom" => 23, "bob" => 22, "alice" => 24];
+//sort($users);
+//print_r($users);
+//echo "<br>";
+
+//$users = ["tom" => 23, "bob" => 22, "alice" => 24];
+//ksort($users);
+//print_r($users);
+
+//these array functions are not giving new array, it's modified the original array.
+
+//explode(), implode()
+$input = "A quick brown fox.";
+$arr = explode(" ", $input);
+print_r($arr);
+echo "<br>";
+$str = implode(" ", $arr);
+echo $str;
+
+
+

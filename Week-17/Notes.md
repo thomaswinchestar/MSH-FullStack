@@ -1,4 +1,4 @@
-# Week 17 - PHP Control Structures, Ternary & Null Coalescing Operators
+# Week 17 - PHP Control Structures, Ternary & Null Coalescing Operators, PHP Functions & Programming Paradigms
 
 ---
 
@@ -25,6 +25,32 @@
 5. [Key Differences & Comparison Table](#5-key-differences--comparison-table)
 6. [Real-World Usage](#6-real-world-usage)
 7. [References](#7-references)
+8. [Programming Paradigms](#8-programming-paradigms)
+   - [Imperative Programming](#81-imperative-programming)
+   - [Procedural Programming](#82-procedural-programming)
+   - [Declarative Programming](#83-declarative-programming)
+   - [Object-Oriented Programming (OOP)](#84-object-oriented-programming-oop)
+   - [Paradigm Comparison Table](#85-paradigm-comparison-table)
+9. [Modular Architecture](#9-modular-architecture)
+   - [What is Modularity?](#91-what-is-modularity)
+   - [Modular Monolith](#92-modular-monolith)
+   - [PHP Modularity in Practice](#93-php-modularity-in-practice)
+10. [First-Class Functions](#10-first-class-functions)
+    - [What Does "First-Class" Mean?](#101-what-does-first-class-mean)
+    - [Functions as Values in PHP](#102-functions-as-values-in-php)
+    - [Higher-Order Functions](#103-higher-order-functions)
+11. [Functional Programming](#11-functional-programming)
+    - [Core Principles](#111-core-principles)
+    - [Pure Functions](#112-pure-functions)
+    - [Immutability](#113-immutability)
+    - [Functional PHP Built-ins](#114-functional-php-built-ins)
+12. [PHP Functions (Part 1)](#12-php-functions-part-1)
+    - [Declaring Functions](#121-declaring-functions)
+    - [Parameters & Return Values](#122-parameters--return-values)
+    - [Default Parameters](#123-default-parameters)
+    - [Rest Parameters](#124-rest-parameters)
+    - [Type Hints](#125-type-hints)
+    - [Useful Built-in Functions](#126-useful-built-in-functions)
 
 ---
 
@@ -541,3 +567,725 @@ echo $message; // "Client Error"
 - [Matt Stauffer — Shorter Ternary Operators in PHP](https://mattstauffer.com/blog/even-shorter-ternary-operators-in-php-using/)
 - [PHP.Watch — Ternary and Coalescing](https://php.watch/articles/php-ternary-and-coalescing)
 - [PHP Tutorial — Null Coalescing Operator](https://www.phptutorial.net/php-tutorial/php-null-coalescing-operator/)
+
+---
+
+## 8. Programming Paradigms
+
+A **programming paradigm** is simply a **style or way of thinking** about how to write code. Different paradigms give you different tools and mental models for solving problems.
+
+> Think of it like cooking styles — you can bake, fry, or steam the same ingredient. Paradigms are different approaches to writing the same program.
+
+PHP and JavaScript both **support multiple paradigms** — you can mix and match depending on what the problem needs.
+
+---
+
+### 8.1 Imperative Programming
+
+**"Tell the computer HOW to do things, step by step."**
+
+Imperative programming is the most natural style — you write instructions one by one, just like a recipe. You manage state explicitly (variables that change over time).
+
+```php
+// Imperative: manually add up numbers step by step
+$nums = [1, 2, 3, 4, 5];
+$total = 0;
+
+for ($i = 0; $i < count($nums); $i++) {
+    $total += $nums[$i]; // mutate $total each step
+}
+
+echo $total; // 15
+```
+
+**Key traits:**
+- You control every step of execution.
+- Variables change (mutable state).
+- Easy to understand for beginners.
+- Can become hard to manage in large codebases.
+
+> 💡 **Real world:** Writing a script that reads a file line by line, processes each line, and writes output — that's imperative.
+
+---
+
+### 8.2 Procedural Programming
+
+**"Imperative programming + organising code into reusable procedures (functions)."**
+
+Procedural programming takes imperative code and groups related steps into named **functions/procedures**. PHP was originally designed as a procedural language.
+
+```php
+// Procedural: same logic wrapped in a reusable function
+function sumArray(array $nums): int {
+    $total = 0;
+    foreach ($nums as $num) {
+        $total += $num;
+    }
+    return $total;
+}
+
+echo sumArray([1, 2, 3, 4, 5]); // 15
+echo sumArray([10, 20, 30]);     // 60
+```
+
+**Key traits:**
+- Code is broken into functions (procedures).
+- Functions can call other functions.
+- Easier to reuse and test than raw imperative code.
+- Still uses mutable state.
+
+> 💡 **Real world:** Classic PHP scripts like `login.php`, `register.php` with functions like `validateEmail()`, `hashPassword()`, `saveUser()` — all procedural.
+
+**Procedural vs Imperative — the simple difference:**
+
+| | Imperative | Procedural |
+|---|---|---|
+| Core idea | Step-by-step instructions | + Grouped into functions |
+| Code reuse | Copy-paste | Call a function |
+| Example | Raw `for` loop | Function wrapping a loop |
+
+> Procedural **is** imperative, but adds the concept of procedures (functions) to organise the steps.
+
+---
+
+### 8.3 Declarative Programming
+
+**"Tell the computer WHAT you want, not HOW to do it."**
+
+In declarative programming, you describe the *result* you want and let the language/runtime figure out the steps. SQL is the classic example — you say "give me all users over 18" and the database decides how to find them.
+
+```php
+// Imperative approach — describe HOW
+$nums = [1, 2, 3, 4, 5];
+$result = [];
+foreach ($nums as $num) {
+    if ($num % 2 === 0) {
+        $result[] = $num * 2;
+    }
+}
+
+// Declarative approach — describe WHAT (using built-in functions)
+$result = array_map(
+    fn($n) => $n * 2,
+    array_filter($nums, fn($n) => $n % 2 === 0)
+);
+
+print_r($result); // [4, 8]
+```
+
+**Key traits:**
+- Focus on *what* the outcome should be.
+- Hide the implementation details.
+- Examples: SQL, HTML, CSS, regex, PHP's `array_map` / `array_filter`.
+- Usually shorter and more readable for the right problems.
+
+> 💡 **Real world:** HTML is declarative — you say `<button>Click me</button>` and the browser figures out how to render it. You don't write pixel-drawing code.
+
+---
+
+### 8.4 Object-Oriented Programming (OOP)
+
+**"Organise code into objects that bundle data (properties) and behaviour (methods) together."**
+
+OOP models the world as **objects** — an object is a thing that has:
+- **Properties** (data it knows about itself)
+- **Methods** (actions it can perform)
+
+```php
+// OOP: a User is an object with data + behaviour
+class User {
+    public string $name;
+    public string $email;
+
+    public function __construct(string $name, string $email) {
+        $this->name  = $name;
+        $this->email = $email;
+    }
+
+    public function greet(): string {
+        return "Hello, {$this->name}!";
+    }
+}
+
+$user = new User("Alice", "alice@example.com");
+echo $user->greet(); // "Hello, Alice!"
+```
+
+**Four pillars of OOP:**
+
+| Pillar | Simple explanation |
+|---|---|
+| **Encapsulation** | Bundle data + behaviour; hide internal details |
+| **Inheritance** | A child class gets the parent's properties/methods |
+| **Polymorphism** | Different objects respond to the same method differently |
+| **Abstraction** | Expose only what's necessary; hide complexity |
+
+> 💡 **Real world:** A `Cart` class that holds items and has `addItem()`, `removeItem()`, `getTotal()` methods — that's OOP.
+
+---
+
+### 8.5 Paradigm Comparison Table
+
+| Paradigm | Focus | State | PHP / JS Use Case |
+|---|---|---|---|
+| **Imperative** | HOW — step by step | Mutable | Simple scripts, loops |
+| **Procedural** | HOW — with functions | Mutable | PHP scripts, utility files |
+| **Declarative** | WHAT — describe the outcome | Often immutable | SQL queries, `array_map/filter` |
+| **OOP** | WHO — objects with state & behaviour | Encapsulated | Laravel models, JS classes |
+| **Functional** | WHAT — pure functions, no side effects | Immutable | Data pipelines, transformations |
+
+> 🧠 **PHP is multi-paradigm** — you can write procedural code, OOP code, and functional-style code in the same file. Use whatever fits the problem best.
+
+---
+
+## 9. Modular Architecture
+
+### 9.1 What is Modularity?
+
+**Modularity** means breaking your application into **small, independent, self-contained pieces** (modules) — each responsible for one specific thing.
+
+Think of LEGO bricks — each brick does its own job, and you can combine them to build anything.
+
+**Why it matters:**
+- 🔍 **Easier to understand** — each piece is small and focused.
+- ♻️ **Reusable** — use the same module in multiple places.
+- 🧪 **Easier to test** — test each piece in isolation.
+- 🛠 **Easier to maintain** — changing one module doesn't break everything else.
+- 👥 **Team-friendly** — different developers can work on different modules.
+
+> 💡 **Single Responsibility Principle (SRP):** A module should do **one thing** and do it well.
+
+---
+
+### 9.2 Modular Monolith
+
+A **monolith** is one big application. A **microservice** architecture splits everything into tiny networked services. A **modular monolith** is the sweet spot in between.
+
+```
+Traditional Monolith          Modular Monolith            Microservices
+─────────────────────        ──────────────────────       ──────────────────
+One giant codebase           One codebase, split          Many separate apps,
+Everything tangled           into clear modules           each deployed alone
+                             [Users] [Orders] [Products]
+```
+
+**Modular Monolith benefits:**
+- Still one deployable application (simple to deploy).
+- Code is organised into well-defined modules with clear boundaries.
+- Modules only communicate through defined interfaces (APIs/contracts).
+- Easy to later extract a module into a microservice if needed.
+
+> 💡 **Real world:** Laravel is a perfect example of a modular monolith — it has separate modules for Auth, Mail, Queue, Database, etc., all inside one application.
+
+---
+
+### 9.3 PHP Modularity in Practice
+
+PHP achieves modularity through:
+
+**`include` / `require` — load external files:**
+
+```php
+// functions/math.php
+function add(int $a, int $b): int {
+    return $a + $b;
+}
+
+// index.php
+require 'functions/math.php'; // load the module
+echo add(3, 4); // 7
+```
+
+**`require` vs `include`:**
+
+| | `include` | `require` |
+|---|---|---|
+| File not found | Warning, continues | Fatal error, stops |
+| Use when | File is optional | File is essential |
+
+**Namespaces — avoid name conflicts between modules:**
+
+```php
+// Module: App\Auth
+namespace App\Auth;
+
+class User {
+    public function login(string $email, string $password): bool {
+        // login logic
+        return true;
+    }
+}
+
+// Module: App\Blog
+namespace App\Blog;
+
+class User {           // Different User — no conflict!
+    public string $slug;
+}
+```
+
+> 💡 **Autoloading:** Modern PHP (with Composer) auto-loads files by namespace, so you don't need to manually `require` every file.
+
+---
+
+## 10. First-Class Functions
+
+### 10.1 What Does "First-Class" Mean?
+
+In programming, when we say something is a **"first-class citizen"**, it means that thing can be:
+
+1. ✅ **Assigned to a variable**
+2. ✅ **Passed as an argument** to another function
+3. ✅ **Returned from** a function
+4. ✅ **Stored in data structures** (arrays, objects)
+
+**First-class functions** means functions are treated like any other value — just like a number or a string.
+
+> 💡 Both **PHP** and **JavaScript** support first-class functions. This is what makes functional programming possible in these languages.
+
+---
+
+### 10.2 Functions as Values in PHP
+
+**1. Assign a function to a variable (anonymous function / closure):**
+
+```php
+// A function stored in a variable
+$greet = function(string $name): string {
+    return "Hello, $name!";
+};
+
+echo $greet("Alice"); // "Hello, Alice!"
+echo $greet("Bob");   // "Hello, Bob!"
+```
+
+**2. Arrow functions (PHP 7.4+) — shorter syntax:**
+
+```php
+$double = fn($n) => $n * 2;
+
+echo $double(5);  // 10
+echo $double(10); // 20
+```
+
+**3. Pass a function as an argument:**
+
+```php
+function applyToAll(array $items, callable $fn): array {
+    $result = [];
+    foreach ($items as $item) {
+        $result[] = $fn($item);
+    }
+    return $result;
+}
+
+$nums    = [1, 2, 3, 4, 5];
+$doubled = applyToAll($nums, fn($n) => $n * 2);
+
+print_r($doubled); // [2, 4, 6, 8, 10]
+```
+
+**4. Return a function from a function:**
+
+```php
+// A "function factory" — creates and returns a new function
+function makeMultiplier(int $factor): callable {
+    return fn($n) => $n * $factor;
+}
+
+$triple = makeMultiplier(3);
+$times5 = makeMultiplier(5);
+
+echo $triple(4); // 12
+echo $times5(4); // 20
+```
+
+---
+
+### 10.3 Higher-Order Functions
+
+A **higher-order function (HOF)** is a function that:
+- Takes one or more functions as **arguments**, OR
+- **Returns** a function
+
+```php
+// array_map is a built-in higher-order function
+$names  = ["alice", "bob", "charlie"];
+$upper  = array_map('strtoupper', $names);
+
+print_r($upper); // ["ALICE", "BOB", "CHARLIE"]
+
+// array_filter is also a HOF
+$scores = [45, 72, 38, 91, 55, 88];
+$passed = array_filter($scores, fn($s) => $s >= 60);
+
+print_r($passed); // [72, 91, 88]
+```
+
+> 💡 **JavaScript parallel:**
+> ```js
+> // JS has the same pattern
+> const double = n => n * 2;
+> [1, 2, 3].map(double); // [2, 4, 6]
+> ```
+
+---
+
+## 11. Functional Programming
+
+### 11.1 Core Principles
+
+**Functional Programming (FP)** is a paradigm that treats computation as **evaluation of pure functions**, avoiding shared state and mutable data.
+
+**Core ideas:**
+1. **Pure functions** — same input always gives same output, no side effects.
+2. **Immutability** — don't change existing data; create new data instead.
+3. **Function composition** — build complex behaviour from simple functions.
+4. **Higher-order functions** — functions that work with other functions.
+5. **Declarative style** — describe *what* to compute, not *how*.
+
+> 💡 FP doesn't mean "no variables ever" — it means preferring functions that don't cause hidden side effects and don't depend on external state.
+
+---
+
+### 11.2 Pure Functions
+
+A **pure function**:
+- Always returns the **same output** for the same input.
+- Has **no side effects** (doesn't modify external state, no database calls, no printing).
+
+```php
+// ✅ PURE — same input always gives same output
+function add(int $a, int $b): int {
+    return $a + $b;
+}
+
+echo add(2, 3); // always 5
+echo add(2, 3); // always 5
+
+// ❌ IMPURE — depends on external state ($total)
+$total = 0;
+function addToTotal(int $n): void {
+    global $total;
+    $total += $n; // modifies external variable — side effect!
+}
+```
+
+**Why pure functions matter:**
+- Easy to **test** — no setup or teardown needed.
+- Easy to **reason about** — no hidden surprises.
+- Safe to run in **parallel** — no shared state to conflict.
+
+---
+
+### 11.3 Immutability
+
+Instead of changing existing data, **create new data**:
+
+```php
+// ❌ Mutable — modifying the original array
+$prices = [100, 200, 300];
+foreach ($prices as &$price) {
+    $price *= 1.1; // mutates original!
+}
+
+// ✅ Immutable — create a new array, leave original untouched
+$prices    = [100, 200, 300];
+$newPrices = array_map(fn($p) => $p * 1.1, $prices);
+
+print_r($prices);    // [100, 200, 300] — unchanged
+print_r($newPrices); // [110, 220, 330] — new array
+```
+
+> 💡 **Real world:** In a shopping cart, don't mutate the cart directly — return a new cart with the item added. This makes undo/redo, history, and debugging much simpler.
+
+---
+
+### 11.4 Functional PHP Built-ins
+
+PHP has excellent built-in higher-order functions that let you write functional-style code:
+
+**`array_map` — transform every item:**
+
+```php
+$names  = ["alice", "bob", "charlie"];
+$titled = array_map('ucfirst', $names);
+// ["Alice", "Bob", "Charlie"]
+```
+
+**`array_filter` — keep items that pass a test:**
+
+```php
+$ages   = [15, 22, 17, 30, 13, 25];
+$adults = array_filter($ages, fn($age) => $age >= 18);
+// [22, 30, 25]
+```
+
+**`array_reduce` — collapse an array to a single value:**
+
+```php
+$nums  = [1, 2, 3, 4, 5];
+$total = array_reduce($nums, fn($carry, $item) => $carry + $item, 0);
+echo $total; // 15
+
+// Real world: total price of cart items
+$cart = [
+    ['name' => 'Book',   'price' => 15],
+    ['name' => 'Pen',    'price' => 5],
+    ['name' => 'Laptop', 'price' => 999],
+];
+$cartTotal = array_reduce($cart, fn($sum, $item) => $sum + $item['price'], 0);
+echo $cartTotal; // 1019
+```
+
+**Chaining functional operations:**
+
+```php
+// Get the total price of only items priced above $10
+$cart = [
+    ['name' => 'Notebook', 'price' => 3],
+    ['name' => 'Book',     'price' => 15],
+    ['name' => 'Laptop',   'price' => 999],
+    ['name' => 'Pen',      'price' => 2],
+];
+
+$total = array_reduce(
+    array_filter($cart, fn($item) => $item['price'] > 10),
+    fn($sum, $item) => $sum + $item['price'],
+    0
+);
+
+echo $total; // 1014 (15 + 999)
+```
+
+---
+
+## 12. PHP Functions (Part 1)
+
+### 12.1 Declaring Functions
+
+A **function** is a named, reusable block of code. You define it once, call it many times.
+
+**Basic syntax:**
+
+```php
+function functionName(parameters): returnType {
+    // function body
+    return value;
+}
+```
+
+**Simple example:**
+
+```php
+function greet(string $name): string {
+    return "Hello, $name!";
+}
+
+echo greet("Alice"); // "Hello, Alice!"
+echo greet("Bob");   // "Hello, Bob!"
+```
+
+> 💡 **JS parallel:** PHP functions work the same way as JavaScript functions, just with `$` for variables and optional type hints.
+> ```js
+> function greet(name) { return `Hello, ${name}!`; }
+> ```
+
+---
+
+### 12.2 Parameters & Return Values
+
+**Parameters** are inputs to the function. **Return values** are the output.
+
+```php
+// echo inside — no return value (procedure style)
+function printSum(int $a, int $b): void {
+    echo $a + $b;
+}
+printSum(3, 4); // prints: 7
+
+// return a value — caller decides what to do with it
+function add(int $a, int $b): int {
+    return $a + $b;
+}
+
+$result = add(3, 4);          // store it
+echo add(10, 20);             // or print directly — 30
+$doubled = add(5, 5) * 2;     // or use in an expression — 20
+```
+
+> 💡 **Prefer `return` over `echo` inside functions.** Returning a value is more flexible — you can echo it, store it, pass it somewhere else, or test it.
+
+---
+
+### 12.3 Default Parameters
+
+You can give a parameter a **default value** — it's used when the caller doesn't pass that argument.
+
+```php
+function add(int $a, int $b = 0): int {
+    return $a + $b;
+}
+
+echo add(5, 3); // 8  — $b = 3
+echo add(5);    // 5  — $b = 0 (default)
+
+// Real world: optional tax rate
+function calculateTotal(float $price, float $taxRate = 0.1): float {
+    return $price + ($price * $taxRate);
+}
+
+echo calculateTotal(100);      // 110 (10% tax)
+echo calculateTotal(100, 0.2); // 120 (20% tax)
+```
+
+> ⚠️ **Rule:** Parameters with default values must come **after** required parameters.
+> ```php
+> // ✅ Correct
+> function greet(string $name, string $prefix = "Hello"): string { ... }
+>
+> // ❌ Wrong — required after optional
+> function greet(string $prefix = "Hello", string $name): string { ... }
+> ```
+
+---
+
+### 12.4 Rest Parameters
+
+When you don't know how many arguments a function will receive, use the **rest parameter** (`...`).
+
+**Modern PHP (rest parameter — PHP 5.6+):**
+
+```php
+function add(int $a, int ...$b): int {
+    return $a + array_sum($b);
+}
+
+echo add(1);          // 1
+echo add(1, 2, 3, 4); // 10 ($b = [2, 3, 4])
+```
+
+**Older PHP (before rest parameter — `func_get_args()`):**
+
+```php
+function add(): int {
+    $args = func_get_args(); // gets all arguments as an array
+    return array_sum($args);
+}
+
+echo add(1, 2, 3, 4); // 10
+```
+
+> 💡 **JS parallel:**
+> ```js
+> function add(a, ...b) { return a + b.reduce((s, n) => s + n, 0); }
+> add(1, 2, 3, 4); // 10
+> ```
+
+---
+
+### 12.5 Type Hints
+
+**Type hints** (also called type declarations) let you specify what **type** a parameter or return value must be. PHP will enforce this at runtime.
+
+**Scalar type hints (PHP 7+):** `int`, `float`, `string`, `bool`
+
+```php
+function multiply(int $a, int $b): int {
+    return $a * $b;
+}
+
+echo multiply(3, 4);     // 12
+// multiply("3", "4");   // TypeError in strict mode
+```
+
+**Array type hint:**
+
+```php
+function sumNumbers(array $nums): int {
+    return array_sum($nums);
+}
+
+echo sumNumbers([1, 2, 3]); // 6
+```
+
+**Nullable type (`?type` — PHP 7.1+):**
+
+```php
+function findUser(?int $id): ?string {
+    if ($id === null) return null;
+    return "User #$id";
+}
+
+echo findUser(5);    // "User #5"
+echo findUser(null); // null (no error)
+```
+
+**Why use type hints?**
+- 🐛 Catch bugs early — PHP tells you when you pass the wrong type.
+- 📖 Self-documenting — anyone reading the code knows what types to use.
+- 🛠 Better IDE support — autocomplete and warnings.
+
+---
+
+### 12.6 Useful Built-in Functions
+
+PHP has hundreds of built-in functions. Here are the ones from today's session:
+
+**String functions:**
+
+```php
+strlen("Hello");          // 5 — string length
+strtoupper("hello");      // "HELLO"
+strtolower("HELLO");      // "hello"
+ucfirst("hello world");   // "Hello world"
+str_replace("o", "0", "Hello World"); // "Hell0 W0rld"
+```
+
+**Array functions:**
+
+```php
+$nums = [3, 1, 4, 1, 5, 9];
+
+count($nums);             // 6 — number of elements
+array_sum($nums);         // 23 — sum all numbers
+array_push($nums, 2);     // add to end
+array_pop($nums);         // remove from end
+sort($nums);              // sort ascending
+array_reverse($nums);     // reverse order
+
+// Functional-style
+array_map(fn($n) => $n * 2, $nums);       // transform
+array_filter($nums, fn($n) => $n > 3);    // filter
+array_reduce($nums, fn($c, $n) => $c + $n, 0); // reduce
+```
+
+**JS ↔ PHP cheat sheet:**
+
+| JavaScript | PHP |
+|---|---|
+| `"hello".length` | `strlen("hello")` |
+| `[1,2,3].length` | `count([1,2,3])` |
+| `[1,2,3].reduce((a,b) => a+b)` | `array_sum([1,2,3])` or `array_reduce(...)` |
+| `[1,2,3].map(fn)` | `array_map(fn, [1,2,3])` |
+| `[1,2,3].filter(fn)` | `array_filter([1,2,3], fn)` |
+| `Math.round(3.7)` | `round(3.7)` |
+| `"alert".toFixed(2)` | `number_format(3.1416, 2)` |
+
+---
+
+## 13. References
+
+- [PHP Manual — Functions](https://www.php.net/manual/en/language.functions.php)
+- [PHP Tutorial — PHP Functions](https://www.phptutorial.net/php-tutorial/php-functions/)
+- [TutorialsPoint — PHP Functions](https://www.tutorialspoint.com/php/php_functions.htm)
+- [GeeksForGeeks — PHP Functions](https://www.geeksforgeeks.org/php/php-functions/)
+- [GeeksForGeeks — Procedural vs OOP](https://www.geeksforgeeks.org/software-engineering/differences-between-procedural-and-object-oriented-programming/)
+- [MDN — First-class Function](https://developer.mozilla.org/en-US/docs/Glossary/First-class_Function)
+- [GeeksForGeeks — First-Class Functions in JavaScript](https://www.geeksforgeeks.org/javascript/what-is-the-first-class-function-in-javascript/)
+- [JScrambler — Higher-Order & First-Class Functions Explained](https://jscrambler.com/blog/high-order-function-first-class-function-explained)
+- [The Server Side — Principles of Functional Programming](https://www.theserverside.com/tip/Understanding-the-principles-of-functional-programming)
+- [Milan Jovanović — What is a Modular Monolith](https://www.milanjovanovic.tech/blog/what-is-a-modular-monolith)
+- [dotNET Full Stack Dev — Modular Monolith](https://dotnetfullstackdev.medium.com/modular-monolith-the-sweet-spot-between-monoliths-and-microservices-c515246f585d)
+- [Anjireddy Kata — Architecture 101: Modular Monolith](https://anjireddy-kata.medium.com/architecture-101-modular-monolith-a-primer-36864f045697)
+

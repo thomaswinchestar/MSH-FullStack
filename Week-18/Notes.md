@@ -15,6 +15,9 @@
    - [The `use` Keyword in Closures](#18-the-use-keyword-in-closures)
    - [Arrow Functions](#19-arrow-functions)
    - [Named Arguments](#110-named-arguments)
+   - [Static Variables in Functions](#111-static-variables-in-functions)
+   - [Recursive Functions](#112-recursive-functions)
+   - [Special Return Types — void, mixed, never](#113-special-return-types--void-mixed-never)
 2. [PHP OOP Introduction](#2-php-oop-introduction)
    - [What is OOP?](#21-what-is-oop)
    - [Class and Object](#22-class-and-object)
@@ -26,6 +29,10 @@
    - [Static Members](#28-static-members)
    - [Scope Resolution Operator (`::`)](#29-scope-resolution-operator-)
    - [Constructor Property Promotion](#210-constructor-property-promotion)
+   - [Class Constants](#211-class-constants)
+   - [Getters and Setters](#212-getters-and-setters)
+   - [Inheritance](#213-inheritance)
+   - [Interfaces and Abstract Classes — A First Look](#214-interfaces-and-abstract-classes--a-first-look)
 3. [OOP vs Procedural — When to Use Which?](#3-oop-vs-procedural--when-to-use-which)
 4. [Real-World Scenarios](#4-real-world-scenarios)
 5. [References](#5-references)
@@ -423,6 +430,228 @@ htmlspecialchars($str, double_encode: false);
 ```
 
 > 💡 Named arguments make function calls **self-documenting** and eliminate confusion when functions have many optional parameters.
+
+---
+
+### 1.11 Static Variables in Functions
+
+A **static variable** inside a function keeps its value **between function calls** — it is initialised only once and persists for the life of the script. This is completely different from class-level `static` properties.
+
+```php
+function counter() {
+    static $count = 0; // initialised once, then remembered
+    $count++;
+    echo $count . "\n";
+}
+
+counter(); // 1
+counter(); // 2
+counter(); // 3
+```
+
+Without `static`, `$count` would reset to `0` on every call.
+
+**How to think about it:**
+
+```
+First call  → $count is created (= 0), incremented → 1, remembered
+Second call → $count already exists (= 1), incremented → 2, remembered
+Third call  → $count already exists (= 2), incremented → 3, remembered
+```
+
+**Real-world use — generating unique IDs:**
+
+```php
+function generateId(): int {
+    static $id = 0;
+    return ++$id;
+}
+
+echo generateId(); // 1
+echo generateId(); // 2
+echo generateId(); // 3
+// Each call gives the next unique integer — no globals needed
+```
+
+**Real-world use — caching an expensive result:**
+
+```php
+function getConfig(): array {
+    static $config = null;
+
+    if ($config === null) {
+        // Imagine this reads from a file or DB — expensive!
+        $config = ['debug' => false, 'version' => '1.0.0'];
+        echo "(loaded from disk)\n";
+    }
+
+    return $config;
+}
+
+getConfig(); // "(loaded from disk)" — runs once
+getConfig(); // returns cached result silently
+getConfig(); // returns cached result silently
+```
+
+> 💡 **JS Parallel:** JavaScript doesn't have static local variables. The equivalent pattern in JS is a closure with an outer variable:
+> ```js
+> const counter = (() => { let count = 0; return () => ++count; })();
+> counter(); // 1
+> counter(); // 2
+> ```
+
+---
+
+### 1.12 Recursive Functions
+
+A **recursive function** is one that **calls itself**. Every recursive function needs:
+
+1. **A base case** — the condition that stops the recursion (otherwise: infinite loop → stack overflow).
+2. **A recursive case** — the function calling itself with a smaller/simpler version of the problem.
+
+**Classic example — Factorial:**
+
+```
+5! = 5 × 4 × 3 × 2 × 1 = 120
+   = 5 × 4!
+       = 4 × 3!
+           = 3 × 2!
+               = 2 × 1!
+                   = 1  ← base case
+```
+
+```php
+function factorial(int $n): int {
+    if ($n <= 1) return 1;      // base case — stop here
+    return $n * factorial($n - 1); // recursive case
+}
+
+echo factorial(5); // 120
+echo factorial(6); // 720
+```
+
+**Visualising the call stack:**
+
+```
+factorial(5)
+  → 5 * factorial(4)
+         → 4 * factorial(3)
+                → 3 * factorial(2)
+                       → 2 * factorial(1)
+                              → 1  (base case)
+                       ← 2 * 1 = 2
+                ← 3 * 2 = 6
+         ← 4 * 6 = 24
+  ← 5 * 24 = 120
+```
+
+**Real-world use — traversing a nested menu:**
+
+```php
+$menu = [
+    ['label' => 'Home',     'children' => []],
+    ['label' => 'Products', 'children' => [
+        ['label' => 'Phones',   'children' => []],
+        ['label' => 'Laptops',  'children' => [
+            ['label' => 'Gaming',    'children' => []],
+            ['label' => 'Business',  'children' => []],
+        ]],
+    ]],
+    ['label' => 'Contact',  'children' => []],
+];
+
+function renderMenu(array $items, int $depth = 0): void {
+    foreach ($items as $item) {
+        echo str_repeat('  ', $depth) . "- " . $item['label'] . "\n";
+        if (!empty($item['children'])) {
+            renderMenu($item['children'], $depth + 1); // recurse deeper
+        }
+    }
+}
+
+renderMenu($menu);
+// - Home
+// - Products
+//   - Phones
+//   - Laptops
+//     - Gaming
+//     - Business
+// - Contact
+```
+
+> ⚠️ **Always define a base case.** Without one, the function calls itself forever until PHP hits the recursion limit and throws a fatal error.
+
+> 💡 **When to use recursion:** Tree-shaped data (menus, file systems, categories, org charts), divide-and-conquer algorithms (merge sort, binary search). For simple loops, use `for`/`foreach` instead.
+
+---
+
+### 1.13 Special Return Types — `void`, `mixed`, `never`
+
+PHP provides special return types for functions with unusual return behaviour.
+
+#### `void` — The function returns nothing
+
+```php
+function logMessage(string $msg): void {
+    echo "[LOG] $msg\n";
+    // no return statement — or bare "return;" is allowed
+}
+
+logMessage("User logged in"); // [LOG] User logged in
+// $result = logMessage("test"); // $result is always NULL
+```
+
+> ⚠️ You cannot `return $value` inside a `void` function — PHP will throw a `TypeError`.
+
+#### `mixed` — The function can return any type (PHP 8.0+)
+
+Use `mixed` when a function intentionally returns different types depending on circumstances:
+
+```php
+function findValue(array $data, string $key): mixed {
+    return $data[$key] ?? null; // could be string, int, array, null...
+}
+
+$config = ['host' => 'localhost', 'port' => 3306, 'debug' => false];
+
+var_dump(findValue($config, 'host'));  // string(9) "localhost"
+var_dump(findValue($config, 'port'));  // int(3306)
+var_dump(findValue($config, 'debug')); // bool(false)
+var_dump(findValue($config, 'xyz'));   // NULL
+```
+
+> 💡 Prefer specific types whenever possible. Use `mixed` only when the ambiguity is genuinely intentional (e.g., JSON deserialisers, generic container classes).
+
+#### `never` — The function never returns (PHP 8.1+)
+
+A function with return type `never` either **throws an exception** or **terminates the script** — it will never return normally to the caller.
+
+```php
+function redirect(string $url): never {
+    header("Location: $url");
+    exit(); // script ends here — never returns
+}
+
+function abort(int $code, string $message): never {
+    http_response_code($code);
+    echo $message;
+    exit(); // same — never returns
+}
+
+// Usage
+if (!$user) {
+    redirect('/login'); // execution stops here
+}
+```
+
+**Summary table:**
+
+| Return type | Meaning | Returns? |
+|---|---|---|
+| `void` | Intentionally returns nothing | ✅ Returns (with `null`) |
+| `mixed` | Can return any type | ✅ Returns (any value) |
+| `never` | Throws or exits | ❌ Never returns to caller |
+| `?Type` | Returns `Type` or `null` | ✅ Returns (or null) |
 
 ---
 
@@ -877,7 +1106,429 @@ echo $p->getInfo(); // "Laptop: $999.99 (10 left)"
 
 ---
 
-## 3. OOP vs Procedural — When to Use Which?
+### 2.11 Class Constants
+
+A **class constant** is a value that **never changes** — it belongs to the class (not an instance), like a static property but immutable. Define them with `const`.
+
+```php
+class Circle {
+    const PI = 3.14159265; // never changes — belongs to the class
+
+    public function __construct(private float $radius) {}
+
+    public function area(): float {
+        return self::PI * $this->radius ** 2;
+    }
+
+    public function circumference(): float {
+        return 2 * self::PI * $this->radius;
+    }
+}
+
+$c = new Circle(5);
+echo $c->area();           // 78.539816...
+echo $c->circumference();  // 31.415926...
+
+// Access the constant directly on the class — no object needed
+echo Circle::PI;           // 3.14159265
+```
+
+**Real-world use — Status codes, roles, states:**
+
+```php
+class Order {
+    const STATUS_PENDING   = 'pending';
+    const STATUS_PAID      = 'paid';
+    const STATUS_SHIPPED   = 'shipped';
+    const STATUS_CANCELLED = 'cancelled';
+
+    private string $status = self::STATUS_PENDING;
+
+    public function pay(): void {
+        $this->status = self::STATUS_PAID;
+    }
+
+    public function ship(): void {
+        if ($this->status !== self::STATUS_PAID) {
+            throw new \Exception("Cannot ship an unpaid order.");
+        }
+        $this->status = self::STATUS_SHIPPED;
+    }
+
+    public function getStatus(): string {
+        return $this->status;
+    }
+}
+
+$order = new Order();
+echo $order->getStatus(); // "pending"
+$order->pay();
+echo $order->getStatus(); // "paid"
+$order->ship();
+echo $order->getStatus(); // "shipped"
+```
+
+**`const` vs `static` property:**
+
+| | `const` | `static $property` |
+|---|---|---|
+| Value changes? | ❌ Never | ✅ Can change |
+| Access | `ClassName::CONST` | `ClassName::$prop` |
+| `$` symbol? | No | Yes |
+| Use for | Fixed values (statuses, config) | Shared mutable state |
+
+---
+
+### 2.12 Getters and Setters
+
+Since properties are often `private` (encapsulation), you need **getter** and **setter** methods to read and write them in a controlled way.
+
+- **Getter** — reads a property (usually `getPropertyName()`)
+- **Setter** — writes a property with validation (usually `setPropertyName($value)`)
+
+```php
+class User {
+    private string $name;
+    private int    $age;
+
+    public function __construct(string $name, int $age) {
+        $this->setName($name); // use setter — validation happens here
+        $this->setAge($age);
+    }
+
+    // --- Getters ---
+    public function getName(): string {
+        return $this->name;
+    }
+
+    public function getAge(): int {
+        return $this->age;
+    }
+
+    // --- Setters with validation ---
+    public function setName(string $name): void {
+        $name = trim($name);
+        if (empty($name)) {
+            throw new \InvalidArgumentException("Name cannot be empty.");
+        }
+        $this->name = ucwords(strtolower($name));
+    }
+
+    public function setAge(int $age): void {
+        if ($age < 0 || $age > 150) {
+            throw new \InvalidArgumentException("Age must be between 0 and 150.");
+        }
+        $this->age = $age;
+    }
+}
+
+$user = new User("  alice smith  ", 25);
+echo $user->getName(); // "Alice Smith" — cleaned automatically
+echo $user->getAge();  // 25
+
+$user->setAge(30);
+echo $user->getAge();  // 30
+
+// $user->setAge(-5); // ❌ Throws InvalidArgumentException
+```
+
+**Why getters and setters matter:**
+
+```php
+// ❌ Without encapsulation — anyone can set invalid data
+$user->age = -999;    // nothing stops this!
+$user->name = "";     // empty name — no check!
+
+// ✅ With getters/setters — all changes go through validation
+$user->setAge(-999);  // throws exception — caught early
+$user->setName("");   // throws exception — caught early
+```
+
+> 💡 **Fluent interface / Method chaining** — setters can return `$this` to allow chaining:
+> ```php
+> public function setName(string $name): static {
+>     $this->name = $name;
+>     return $this; // returns the object so you can chain
+> }
+>
+> $user->setName("Alice")->setAge(25); // clean chained calls
+> ```
+
+---
+
+### 2.13 Inheritance
+
+**Inheritance** lets a child class **extend** a parent class — it automatically gets all of the parent's `public` and `protected` properties and methods, and can add its own or **override** existing ones.
+
+```
+Parent class (Animal)
+   ├── Dog  (child — inherits from Animal, adds bark())
+   ├── Cat  (child — inherits from Animal, adds purr())
+   └── Bird (child — inherits from Animal, overrides move())
+```
+
+**Basic inheritance:**
+
+```php
+// Parent class
+class Animal {
+    public function __construct(protected string $name) {}
+
+    public function eat(): void {
+        echo "{$this->name} is eating.\n";
+    }
+
+    public function sleep(): void {
+        echo "{$this->name} is sleeping.\n";
+    }
+}
+
+// Child class — inherits eat() and sleep(), adds bark()
+class Dog extends Animal {
+    public function bark(): void {
+        echo "{$this->name} says: Woof!\n";
+    }
+}
+
+// Another child — inherits everything, adds purr()
+class Cat extends Animal {
+    public function purr(): void {
+        echo "{$this->name} says: Purrrr...\n";
+    }
+}
+
+$dog = new Dog("Rex");
+$dog->eat();   // "Rex is eating."    — inherited from Animal
+$dog->bark();  // "Rex says: Woof!"  — Dog's own method
+
+$cat = new Cat("Whiskers");
+$cat->sleep(); // "Whiskers is sleeping." — inherited
+$cat->purr();  // "Whiskers says: Purrrr..." — Cat's own
+```
+
+**Overriding a parent method:**
+
+```php
+class Animal {
+    public function __construct(protected string $name) {}
+
+    public function move(): string {
+        return "{$this->name} moves.";
+    }
+}
+
+class Bird extends Animal {
+    // Override the parent's move() with a more specific version
+    public function move(): string {
+        return "{$this->name} flies through the sky!";
+    }
+}
+
+class Fish extends Animal {
+    public function move(): string {
+        return "{$this->name} swims through the water!";
+    }
+}
+
+$bird = new Bird("Eagle");
+$fish = new Fish("Nemo");
+
+echo $bird->move(); // "Eagle flies through the sky!"
+echo $fish->move(); // "Nemo swims through the water!"
+```
+
+**Calling the parent's method with `parent::`:**
+
+```php
+class Animal {
+    public function __construct(protected string $name) {}
+
+    public function describe(): string {
+        return "I am {$this->name}";
+    }
+}
+
+class Dog extends Animal {
+    public function __construct(string $name, private string $breed) {
+        parent::__construct($name); // call parent constructor first!
+    }
+
+    public function describe(): string {
+        return parent::describe() . ", a {$this->breed} dog.";
+        // "I am Rex, a Labrador dog."
+    }
+}
+
+$dog = new Dog("Rex", "Labrador");
+echo $dog->describe(); // "I am Rex, a Labrador dog."
+```
+
+**`instanceof` — check if an object is a certain class:**
+
+```php
+$dog = new Dog("Rex", "Labrador");
+
+var_dump($dog instanceof Dog);    // true
+var_dump($dog instanceof Animal); // true — Dog IS an Animal (inheritance)
+var_dump($dog instanceof Cat);    // false
+```
+
+**Real-world use — E-Commerce (User roles):**
+
+```php
+class User {
+    public function __construct(
+        protected string $name,
+        protected string $email
+    ) {}
+
+    public function getRole(): string { return 'user'; }
+    public function canPost(): bool   { return false; }
+}
+
+class Admin extends User {
+    public function getRole(): string { return 'admin'; }
+    public function canPost(): bool   { return true; }
+    public function deleteUser(User $user): void {
+        echo "Admin {$this->name} deleted user {$user->name}.\n";
+    }
+}
+
+$user  = new User("Bob", "bob@example.com");
+$admin = new Admin("Alice", "alice@example.com");
+
+echo $user->getRole();  // "user"
+echo $admin->getRole(); // "admin"
+echo $admin->canPost() ? "can post" : "cannot post"; // "can post"
+```
+
+> ⚠️ PHP supports **single inheritance only** — a class can only `extend` one parent. To share behaviour across unrelated classes, use **Traits** (covered later) or **Interfaces**.
+
+---
+
+### 2.14 Interfaces and Abstract Classes — A First Look
+
+These are mentioned in `PHP-OOP-1.php` as upcoming topics. Here is a clear conceptual introduction so you know what they are before we dive in next week.
+
+#### What is an Interface?
+
+An **interface** is a **contract** — it defines *what methods a class must have*, but not *how* they work. Any class that `implements` an interface must provide all of its methods.
+
+```php
+interface Drawable {
+    public function draw(): string;   // must be implemented
+    public function getColor(): string; // must be implemented
+}
+
+class Circle implements Drawable {
+    public function __construct(private string $color, private float $radius) {}
+
+    public function draw(): string {
+        return "Drawing a {$this->color} circle with radius {$this->radius}";
+    }
+
+    public function getColor(): string {
+        return $this->color;
+    }
+}
+
+class Square implements Drawable {
+    public function __construct(private string $color, private float $side) {}
+
+    public function draw(): string {
+        return "Drawing a {$this->color} square with side {$this->side}";
+    }
+
+    public function getColor(): string {
+        return $this->color;
+    }
+}
+
+// Both shapes honour the Drawable contract
+$shapes = [new Circle("red", 5), new Square("blue", 4)];
+
+foreach ($shapes as $shape) {
+    echo $shape->draw() . "\n";
+}
+// "Drawing a red circle with radius 5"
+// "Drawing a blue square with side 4"
+```
+
+**Why interfaces?**
+- Enforce a contract across unrelated classes.
+- A class can implement **multiple interfaces** (unlike single inheritance).
+- Makes code easier to swap out — any `Drawable` can be used where a `Drawable` is expected.
+
+#### What is an Abstract Class?
+
+An **abstract class** is a **half-finished blueprint** — it can have:
+- **Concrete methods** (fully implemented — all children inherit them)
+- **Abstract methods** (no body — each child *must* provide its own version)
+
+You **cannot** create an object directly from an abstract class.
+
+```php
+abstract class Shape {
+    // Concrete method — shared by all shapes
+    public function describe(): string {
+        return "I am a " . get_class($this) . " with color {$this->color}";
+    }
+
+    // Abstract method — each shape must define how to calculate its area
+    abstract public function area(): float;
+}
+
+class Circle extends Shape {
+    public function __construct(
+        public string $color,
+        private float $radius
+    ) {}
+
+    // Must implement area() — abstract forces this
+    public function area(): float {
+        return M_PI * $this->radius ** 2;
+    }
+}
+
+class Rectangle extends Shape {
+    public function __construct(
+        public string $color,
+        private float $width,
+        private float $height
+    ) {}
+
+    public function area(): float {
+        return $this->width * $this->height;
+    }
+}
+
+$shapes = [new Circle("red", 5), new Rectangle("blue", 4, 6)];
+
+foreach ($shapes as $shape) {
+    echo $shape->describe() . " — Area: " . round($shape->area(), 2) . "\n";
+}
+// "I am a Circle with color red — Area: 78.54"
+// "I am a Rectangle with color blue — Area: 24"
+
+// new Shape(); // ❌ Cannot instantiate abstract class
+```
+
+**Interface vs Abstract Class:**
+
+| | Interface | Abstract Class |
+|---|---|---|
+| Has method bodies? | ❌ No | ✅ Yes (concrete + abstract) |
+| Can have properties? | ❌ No | ✅ Yes |
+| Can be instantiated? | ❌ No | ❌ No |
+| `extends` / `implements` | `implements` | `extends` |
+| Multiple? | ✅ One class can implement many | ❌ Only one parent class |
+| Use when | You need a contract / shared type | You want to share code + enforce structure |
+
+> 💡 **Simple rule of thumb:**
+> - Use an **interface** when different unrelated classes need to honour the same contract.
+> - Use an **abstract class** when related classes share code but each must implement specific parts differently.
+
+---
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1063,12 +1714,20 @@ echo $blue->toCSS(); // "rgb(0, 0, 255)"
 ## 5. References
 
 - [PHP Manual — Functions](https://www.php.net/manual/en/language.functions.php)
+- [PHP Manual — User-Defined Functions](https://www.php.net/manual/en/functions.user-defined.php)
 - [PHP Manual — Classes and Objects](https://www.php.net/manual/en/language.oop5.php)
 - [PHP Manual — Constructor Promotion](https://www.php.net/manual/en/language.oop5.decon.php#language.oop5.decon.constructor.promotion)
 - [PHP Manual — Named Arguments](https://www.php.net/manual/en/functions.named-arguments.php)
 - [PHP Manual — Arrow Functions](https://www.php.net/manual/en/functions.arrow.php)
 - [PHP Manual — Anonymous Functions](https://www.php.net/manual/en/functions.anonymous.php)
-- [GeeksForGeeks — Procedural vs OOP](https://www.geeksforgeeks.org/software-engineering/differences-between-procedural-and-object-oriented-programming/)
-- [PHP Tutorial — PHP OOP](https://www.phptutorial.net/php-oop/)
+- [W3Schools — PHP Functions](https://www.w3schools.com/php/php_functions.asp)
+- [W3Schools — PHP OOP](https://www.w3schools.com/php/php_oop_what_is.asp)
+- [TutorialsPoint — PHP Functions](https://www.tutorialspoint.com/php/php_functions.htm)
 - [TutorialsPoint — PHP OOP](https://www.tutorialspoint.com/php/php_object_oriented.htm)
+- [GeeksForGeeks — PHP Functions](https://www.geeksforgeeks.org/php/php-functions/)
+- [GeeksForGeeks — Procedural vs OOP](https://www.geeksforgeeks.org/software-engineering/differences-between-procedural-and-object-oriented-programming/)
+- [PHP Language Spec — Functions](https://phplang.org/spec/13-functions)
+- [PHP Tutorial — PHP OOP](https://www.phptutorial.net/php-oop/)
+- [Inspector.dev — OOP in PHP](https://inspector.dev/object-oriented-programming-in-php/)
+- [WebReference — PHP OOP](https://webreference.com/php/object-oriented/)
 

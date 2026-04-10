@@ -55,3 +55,5 @@ function add(Array $nums) {
     return array_sum($nums);
 }
 echo add([1, 2]);
+
+

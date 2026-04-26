@@ -20,8 +20,11 @@
 5. [Singleton Pattern](#5-singleton-pattern)
 6. [Builder Pattern](#6-builder-pattern)
 7. [Factory Pattern](#7-factory-pattern)
-8. [Patterns Used in Laravel](#8-patterns-used-in-laravel)
-9. [References](#9-references)
+8. [Strategy Pattern](#8-strategy-pattern)
+9. [Facade Pattern](#9-facade-pattern)
+10. [Provider Pattern](#10-provider-pattern)
+11. [Patterns Used in Laravel](#11-patterns-used-in-laravel)
+12. [References](#12-references)
 
 ---
 
@@ -777,7 +780,7 @@ The most famous catalogue is **"Design Patterns: Elements of Reusable Object-Ori
 | **Structural** | How objects are *composed / structured* | Adapter, Bridge, Composite, Decorator, Facade, Flyweight, Proxy |
 | **Behavioural** | How objects *communicate / interact* | Chain of Responsibility, Command, Iterator, Mediator, Memento, Observer, State, Strategy, Template Method, Visitor, Interpreter |
 
-> 💡 This week we focused on **Creational Patterns** — specifically **Singleton**, **Builder**, and **Factory**.
+> 💡 This week we focused on **Creational Patterns** (Singleton, Builder, Factory) and **Behavioural Patterns** (Strategy) and a **Structural Pattern** (Facade), plus the **Provider Pattern** used heavily in modern frameworks.
 
 ---
 
@@ -1395,7 +1398,646 @@ echo $db->connect();
 
 ---
 
-## 8. Patterns Used in Laravel
+## 8. Strategy Pattern
+
+### What is it?
+
+The **Strategy Pattern** defines a **family of algorithms** (behaviours), puts each one in a separate class, and makes them **interchangeable**. The caller selects which strategy to use at runtime — without changing the calling code.
+
+```
+"Same operation, different algorithms — swap them freely."
+```
+
+It is a **Behavioural Pattern** because it changes *how* objects communicate and delegate work.
+
+### The Problem It Solves
+
+Without Strategy, adding a new payment method means opening and editing the existing `Payment` class — violating the Open/Closed Principle:
+
+```php
+// ❌ BAD — adding new payment type forces you to modify existing class
+class Payment {
+    public function pay(string $context): int {
+        switch ($context) {
+            case "cash":   return 100;
+            case "mobile": return 90;
+            // Adding "crypto" here forces modification of this working class!
+            default:       return 100;
+        }
+    }
+}
+```
+
+### The Strategy Solution
+
+```php
+// Step 1 — Define the strategy interface (the "contract")
+interface PaymentInterface {
+    public function amount(): int;
+}
+
+// Step 2 — Concrete strategies, each in its own class
+class CashPayment implements PaymentInterface {
+    public function amount(): int {
+        return 100; // full price
+    }
+}
+
+class MobilePayment implements PaymentInterface {
+    public function amount(): int {
+        return 90; // 10% discount for mobile payments
+    }
+}
+
+// Step 3 — Context class that USES the strategy
+class Payment {
+    private PaymentInterface $paymentMethod;
+
+    public function pay(string $context): int {
+        // Select the strategy
+        $this->paymentMethod = match ($context) {
+            "cash"   => new CashPayment(),
+            "mobile" => new MobilePayment(),
+            default  => new CashPayment(),
+        };
+        return $this->paymentMethod->amount();
+    }
+}
+
+$payment = new Payment();
+echo $payment->pay("cash")   . " USD\n"; // 100 USD
+echo $payment->pay("mobile") . " USD\n"; // 90 USD
+```
+
+### Improved Version — Inject the Strategy (DIP + Strategy together)
+
+The real power of Strategy is **injecting** it from outside (Dependency Inversion), so the `Payment` class never needs to change:
+
+```php
+interface PaymentInterface {
+    public function amount(): int;
+    public function label(): string;
+}
+
+class CashPayment implements PaymentInterface {
+    public function amount(): int  { return 100; }
+    public function label(): string { return "Cash"; }
+}
+
+class MobilePayment implements PaymentInterface {
+    public function amount(): int  { return 90; }
+    public function label(): string { return "Mobile Money"; }
+}
+
+class CardPayment implements PaymentInterface {
+    public function amount(): int  { return 95; }
+    public function label(): string { return "Credit Card"; }
+}
+
+// ✅ Context — closed for modification, open for new strategies
+class Checkout {
+    public function __construct(private PaymentInterface $strategy) {}
+
+    public function processPayment(): void {
+        echo "Processing " . $this->strategy->label()
+           . " payment. Amount: " . $this->strategy->amount() . " USD\n";
+    }
+}
+
+// Swap strategies freely — Checkout never changes
+$order1 = new Checkout(new CashPayment());
+$order1->processPayment(); // Processing Cash payment. Amount: 100 USD
+
+$order2 = new Checkout(new MobilePayment());
+$order2->processPayment(); // Processing Mobile Money payment. Amount: 90 USD
+
+$order3 = new Checkout(new CardPayment());
+$order3->processPayment(); // Processing Credit Card payment. Amount: 95 USD
+```
+
+### Real-World Use Cases
+
+**1. E-commerce Checkout — Multiple Payment Methods:**
+
+An online shop supports Cash on Delivery, Mobile Banking, Stripe, PayPal, and Crypto. Each is a separate strategy. The checkout flow never changes — new payment providers are added as new strategy classes only.
+
+**2. Sorting Algorithms:**
+
+```php
+interface SortStrategy {
+    public function sort(array $data): array;
+}
+
+class BubbleSort implements SortStrategy {
+    public function sort(array $data): array {
+        // bubble sort implementation...
+        sort($data); // simplified
+        return $data;
+    }
+}
+
+class QuickSort implements SortStrategy {
+    public function sort(array $data): array {
+        // quick sort implementation...
+        sort($data); // simplified
+        return $data;
+    }
+}
+
+class DataProcessor {
+    public function __construct(private SortStrategy $sorter) {}
+
+    public function process(array $data): array {
+        return $this->sorter->sort($data);
+    }
+}
+
+// For small data sets use BubbleSort, for large data sets use QuickSort
+$smallDataProcessor = new DataProcessor(new BubbleSort());
+$largeDataProcessor = new DataProcessor(new QuickSort());
+```
+
+**3. File Export (PDF, CSV, Excel):**
+
+A reporting system needs to export reports in different formats. Each format (PDF, CSV, Excel) is a Strategy. The `ReportExporter` class stays the same, and new formats are added without touching it.
+
+```php
+interface ExportStrategy {
+    public function export(array $data): string;
+}
+
+class PDFExport implements ExportStrategy {
+    public function export(array $data): string {
+        return "Exporting " . count($data) . " rows as PDF...";
+    }
+}
+
+class CSVExport implements ExportStrategy {
+    public function export(array $data): string {
+        return implode(",", array_column($data, 'name'));
+    }
+}
+
+class ExcelExport implements ExportStrategy {
+    public function export(array $data): string {
+        return "Exporting " . count($data) . " rows as Excel...";
+    }
+}
+
+class ReportExporter {
+    public function __construct(private ExportStrategy $strategy) {}
+
+    public function export(array $data): string {
+        return $this->strategy->export($data);
+    }
+}
+
+$data = [['name' => 'Alice'], ['name' => 'Bob']];
+
+$exporter = new ReportExporter(new CSVExport());
+echo $exporter->export($data); // Alice,Bob
+
+$exporter = new ReportExporter(new PDFExport());
+echo $exporter->export($data); // Exporting 2 rows as PDF...
+```
+
+### Strategy vs switch-case vs if-else
+
+| Approach | Adding new behaviour | Risk |
+|---|---|---|
+| `if/elseif/switch` | Edit existing class — risk of breaking things | High |
+| **Strategy Pattern** | Add a new class — existing code untouched | Zero |
+
+> 🌍 **Real-world analogy:** A GPS navigation app. You choose a route strategy — "Fastest", "Shortest", "Avoid Tolls", "Scenic Route." The app (context) doesn't change. Only the routing algorithm (strategy) changes. Add a new strategy like "Avoid Highways" without touching the app's navigation logic.
+
+> 💡 **Used in Laravel:** Authentication guards use Strategy — `config/auth.php` lets you switch between `session`, `token`, or custom guards. Each guard is a strategy. Laravel's encryption and hashing drivers work the same way.
+
+---
+
+## 9. Facade Pattern
+
+### What is it?
+
+The **Facade Pattern** provides a **simple, unified interface** to a **complex subsystem** of classes. It hides the internal complexity behind one easy-to-use interface.
+
+```
+"A single door into a complex building."
+```
+
+It is a **Structural Pattern** because it changes how objects are *composed* and *accessed*.
+
+### The Problem It Solves
+
+Imagine starting a car. Behind the scenes there are many subsystems — oil pressure check, brake fluid check, battery check, fuel injection, ignition. Without a Facade, every caller would need to know and manually coordinate all these subsystems.
+
+### Simple Facade — The Car Example
+
+```php
+// Complex subsystems — each does one specific thing
+class CheckOilPressure {
+    public function check(): void {
+        echo "Oil Pressure OK.\n";
+    }
+}
+
+class CheckBreakFluid {
+    public function check(): void {
+        echo "Brake Fluid OK.\n";
+    }
+}
+
+class CheckBattery {
+    public function check(): void {
+        echo "Battery OK.\n";
+    }
+}
+
+// ✅ Facade — hides all the complexity behind one simple start() call
+class Car {
+    private CheckOilPressure $oil;
+    private CheckBreakFluid  $brake;
+    private CheckBattery     $battery;
+
+    public function __construct() {
+        $this->oil     = new CheckOilPressure();
+        $this->brake   = new CheckBreakFluid();
+        $this->battery = new CheckBattery();
+    }
+
+    // Single simple interface — caller just calls start()
+    public function start(): void {
+        $this->oil->check();
+        $this->brake->check();
+        $this->battery->check();
+        echo "🚗 Car Engine Started!\n";
+    }
+}
+
+// Caller sees NOTHING of the complexity
+$car = new Car();
+$car->start();
+// Oil Pressure OK.
+// Brake Fluid OK.
+// Battery OK.
+// 🚗 Car Engine Started!
+```
+
+### Laravel-Style Facade — Static API over Instance
+
+Laravel's Facade pattern goes further. It lets you call methods **statically** on a Facade class, but behind the scenes resolves a **real object instance** from the service container.
+
+```php
+// Base Facade using __callStatic magic method
+class Facade {
+    static function __callStatic(string $name, array $args): void {
+        $method = strtoupper($name); // e.g., "get" → "GET"
+        $path   = $args[0] ?? "/";
+        echo "Sending $method to $path\n";
+    }
+}
+
+// Route facade — just extends Facade, adds nothing
+class Route extends Facade {
+    // inherits __callStatic from Facade
+}
+
+// Usage — looks like a static call, but can be backed by an instance
+Route::get("/comments");  // Sending GET to /comments
+Route::post("/users");    // Sending POST to /users
+Route::delete("/posts/1"); // Sending DELETE to /posts/1
+```
+
+### How `__callStatic` Works
+
+`__callStatic` is a PHP magic method that is automatically called when you invoke a **static method that doesn't exist** on the class:
+
+```
+Route::get("/comments")
+     ↓
+PHP sees: get() doesn't exist statically on Route
+     ↓
+PHP calls: __callStatic("get", ["/comments"])
+     ↓
+Our Facade handles it → "Sending GET to /comments"
+```
+
+This is how Laravel's `Route::get()`, `DB::table()`, `Cache::get()`, `Mail::send()` all work!
+
+### Real-World Facade — Full E-Commerce Order System
+
+```php
+// Complex subsystems
+class InventoryService {
+    public function reserve(int $productId, int $qty): void {
+        echo "✅ Reserved $qty units of product #$productId\n";
+    }
+}
+
+class PaymentGateway {
+    public function charge(float $amount, string $method): void {
+        echo "💳 Charged $$amount via $method\n";
+    }
+}
+
+class InvoiceService {
+    public function generate(int $orderId): void {
+        echo "🧾 Invoice generated for order #$orderId\n";
+    }
+}
+
+class EmailService {
+    public function sendConfirmation(string $email, int $orderId): void {
+        echo "📧 Confirmation email sent to $email for order #$orderId\n";
+    }
+}
+
+// ✅ Order Facade — simple interface for a complex multi-step process
+class OrderFacade {
+    private InventoryService $inventory;
+    private PaymentGateway   $payment;
+    private InvoiceService   $invoice;
+    private EmailService     $email;
+
+    public function __construct() {
+        $this->inventory = new InventoryService();
+        $this->payment   = new PaymentGateway();
+        $this->invoice   = new InvoiceService();
+        $this->email     = new EmailService();
+    }
+
+    // ONE method the controller calls — caller is shielded from all subsystems
+    public function placeOrder(
+        int    $orderId,
+        int    $productId,
+        int    $qty,
+        float  $amount,
+        string $paymentMethod,
+        string $userEmail
+    ): void {
+        $this->inventory->reserve($productId, $qty);
+        $this->payment->charge($amount, $paymentMethod);
+        $this->invoice->generate($orderId);
+        $this->email->sendConfirmation($userEmail, $orderId);
+        echo "🎉 Order #$orderId placed successfully!\n";
+    }
+}
+
+// Controller — clean and simple, knows nothing about subsystems
+$order = new OrderFacade();
+$order->placeOrder(1001, 42, 2, 199.98, "Mobile Pay", "alice@example.com");
+// ✅ Reserved 2 units of product #42
+// 💳 Charged $199.98 via Mobile Pay
+// 🧾 Invoice generated for order #1001
+// 📧 Confirmation email sent to alice@example.com for order #1001
+// 🎉 Order #1001 placed successfully!
+```
+
+### Facade vs Direct Subsystem Access
+
+| | Without Facade | With Facade |
+|---|---|---|
+| Caller complexity | Must know all subsystems | Calls one method |
+| Coupling | Tightly coupled to every subsystem | Coupled to Facade only |
+| Change impact | Change any subsystem → update every caller | Change subsystem → update Facade only |
+| Readability | Long, complex controller code | Short, readable controller code |
+
+### Real-World Use Cases
+
+| Scenario | Facade hides... |
+|---|---|
+| **Car start button** | Oil check, brake check, battery check, ignition sequence |
+| **Hotel check-in desk** | Room assignment, keycard activation, billing setup, housekeeping notification |
+| **ATM machine** | Authentication, balance check, cash dispenser, transaction logging, receipt printing |
+| **Package manager (`npm install`)** | Dependency resolution, download, extraction, linking, cache management |
+| **Laravel `Mail::send()`** | SMTP connection, message building, queue handling, logging |
+
+> 🌍 **Real-world analogy:** When you press the "Order Now" button on an e-commerce site, the button is the Facade. Behind it: inventory reservation, payment processing, invoice generation, and email notifications all fire — but you only pressed one button.
+
+> ⚠️ **Facade Pitfall:** Don't let the Facade grow into a "God class" that does everything. It should be a **thin coordinator** that delegates to specialised subsystems — not a place for business logic.
+
+> 💡 **Used in Laravel:** `Mail::send()`, `Route::get()`, `DB::table()`, `Cache::get()`, `Storage::put()`, `Auth::check()` — every Laravel Facade is backed by a real service instance resolved from the IoC Container through `__callStatic`.
+
+---
+
+## 10. Provider Pattern
+
+### What is it?
+
+The **Provider Pattern** is a **service registration and resolution** mechanism. You **register** services (class names or instances) into a container, then **resolve** (retrieve) them by name or key anywhere in the app.
+
+```
+"Register what you have. Ask for what you need. The provider delivers it."
+```
+
+It forms the backbone of modern Dependency Injection (DI) Containers and Service Containers — used in Laravel, .NET, Angular, and many other frameworks.
+
+### The Problem It Solves
+
+Without a provider/container, every class that needs a `Logger` or `Database` must either:
+- Create it with `new` (tight coupling), or
+- Have it manually passed in everywhere (tedious wiring)
+
+With a provider, you **register once, use anywhere**.
+
+### The Provider Pattern from Your Code
+
+```php
+// Step 1 — Define a common interface
+interface Log {
+    public function write(): void;
+}
+
+// Step 2 — Concrete implementations
+class Text implements Log {
+    public function write(): void {
+        echo "Saving to text file\n";
+    }
+}
+
+class Memory implements Log {
+    public function write(): void {
+        echo "Saving to memory cache\n";
+    }
+}
+
+// Step 3 — Services container — holds a registry of class names
+class Services {
+    public array $container = [];
+
+    // Register: name → class
+    public function register(string $name, string $class): void {
+        $this->container[$name] = $class;
+    }
+}
+
+$services = new Services();
+$services->register("text",   Text::class);   // register the Text logger
+$services->register("memory", Memory::class); // register the Memory logger
+
+// Step 4 — Provider — resolves (creates) instances by name
+class Provider {
+    private array $services;
+
+    public function __construct(Services $services) {
+        $this->services = $services->container;
+    }
+
+    public function make(string $service): ?Log {
+        if (isset($this->services[$service])) {
+            return new $this->services[$service]; // instantiate on demand
+        }
+        return null;
+    }
+}
+
+$provider = new Provider($services);
+
+// Resolve by name — no `new Text()` or `new Memory()` in calling code
+$log = $provider->make("text");
+$log->write(); // Saving to text file
+
+$log = $provider->make("memory");
+$log->write(); // Saving to memory cache
+```
+
+### How the Resolution Works
+
+```
+$services->register("text", Text::class)
+         ↓
+container = ["text" => "Text", "memory" => "Memory"]
+
+$provider->make("text")
+         ↓
+looks up "text" in container → finds "Text"
+         ↓
+new "Text"() → returns a new Text instance
+         ↓
+caller calls ->write() on it
+```
+
+### Enhanced Provider — With Interface Type Checking
+
+```php
+interface Log {
+    public function write(string $message): void;
+}
+
+class FileLog implements Log {
+    public function write(string $message): void {
+        echo "[FILE]   " . date('H:i:s') . " — $message\n";
+        // In real code: file_put_contents('app.log', $message . PHP_EOL, FILE_APPEND);
+    }
+}
+
+class DatabaseLog implements Log {
+    public function write(string $message): void {
+        echo "[DB]     " . date('H:i:s') . " — $message\n";
+        // In real code: INSERT INTO logs (message, created_at) VALUES (...)
+    }
+}
+
+class SlackLog implements Log {
+    public function write(string $message): void {
+        echo "[SLACK]  " . date('H:i:s') . " — $message\n";
+        // In real code: send HTTP POST to Slack webhook URL
+    }
+}
+
+class ServiceContainer {
+    private array $bindings = [];
+
+    public function bind(string $name, string $class): void {
+        $this->bindings[$name] = $class;
+    }
+
+    public function make(string $name): object {
+        if (!isset($this->bindings[$name])) {
+            throw new \RuntimeException("Service '$name' not registered.");
+        }
+        return new $this->bindings[$name];
+    }
+
+    public function has(string $name): bool {
+        return isset($this->bindings[$name]);
+    }
+}
+
+// Bootstrap — register services once, at app startup
+$container = new ServiceContainer();
+$container->bind('log.file',     FileLog::class);
+$container->bind('log.database', DatabaseLog::class);
+$container->bind('log.slack',    SlackLog::class);
+
+// Usage anywhere in the app — just ask by name
+/** @var Log $logger */
+$logger = $container->make('log.file');
+$logger->write("User logged in");   // [FILE]  12:00:01 — User logged in
+
+$logger = $container->make('log.database');
+$logger->write("Order #1001 created"); // [DB]  12:00:01 — Order #1001 created
+
+$logger = $container->make('log.slack');
+$logger->write("Critical error!"); // [SLACK]  12:00:01 — Critical error!
+
+// Swap the logger in one place — all callers automatically use the new one
+```
+
+### Real-World Use Cases
+
+**1. Switching environments (dev vs production):**
+
+```php
+// In development
+$container->bind('mailer', MailhogDriver::class); // catches emails locally
+
+// In production
+$container->bind('mailer', SmtpDriver::class);    // sends real emails
+
+// Application code never changes — it just calls $container->make('mailer')
+```
+
+**2. A/B Testing Pricing Strategies:**
+
+```php
+$container->bind('pricing', $useNewAlgorithm ? NewPricingStrategy::class : OldPricingStrategy::class);
+
+$pricingService = $container->make('pricing');
+echo $pricingService->calculate($cart); // uses whichever is registered
+```
+
+**3. Plugin / Driver Architecture:**
+
+CMS platforms use a Provider/Container so that third-party plugins can register their own services and override existing ones without touching core code.
+
+### Provider Pattern vs Other Patterns
+
+| Pattern | Purpose | Creates objects |
+|---|---|---|
+| **Factory** | Creates objects of *one family* | Yes — specific type |
+| **Builder** | Builds *one complex object* step by step | Yes — step by step |
+| **Strategy** | Selects *an algorithm* at runtime | No — just uses object |
+| **Provider** | *Registers and resolves* any service by name | Yes — on demand from registry |
+
+### Key Concepts Summary
+
+```
+Registering    →  $container->bind('key', ClassName::class)
+Resolving      →  $container->make('key')  → new ClassName()
+Dependency Inversion → callers depend on the container/interface, not concrete classes
+```
+
+> 🌍 **Real-world analogy:** A hotel concierge desk. You tell the hotel "we have a restaurant, a gym, and a spa" (register). A guest just says "I want the restaurant" (resolve). The concierge (provider) knows where everything is and delivers it. Guests never need to know the restaurant's address.
+
+> 💡 **This is the foundation of Laravel's IoC Container.** In Laravel:
+> - `app()->bind('log', FileLog::class)` — register
+> - `app()->make('log')` — resolve  
+> - `app()->singleton('db', Database::class)` — register as a singleton (resolved once, reused)
+> - Every time you type-hint in a Laravel controller constructor, Laravel's container automatically resolves and injects the dependency for you.
+
+---
+
+## 11. Patterns Used in Laravel
 
 Once you understand these patterns, you'll recognise them everywhere in Laravel:
 
@@ -1405,14 +2047,15 @@ Once you understand these patterns, you'll recognise them everywhere in Laravel:
 | **Builder** | Query Builder `DB::table()->where()->get()`, Mail, HTTP Client |
 | **Factory** | Database Factories (`User::factory()->create()`), `Auth::guard()` |
 | **Factory Method** | `Cache::driver()`, `Mail::mailer()`, `Storage::disk()` |
+| **Strategy** | Authentication guards (`session`, `token`, OAuth), Encryption drivers, Hashing algorithms |
+| **Facade** | `Route::get()`, `DB::table()`, `Cache::get()`, `Mail::send()`, `Auth::check()`, `Storage::put()` |
+| **Provider** | Service Container (`app()->bind()`, `app()->make()`), Service Providers (`AppServiceProvider`, etc.) |
 | **Observer** | Eloquent model events (`creating`, `updated`, `deleted`) |
-| **Strategy** | Authentication guards (session, token, OAuth) |
-| **Facade** | All Laravel facades — static-looking API over instance-based services |
 | **Decorator** | Middleware pipeline — wraps request/response handling |
 
 ---
 
-## 9. References
+## 12. References
 
 - [Refactoring Guru — Design Patterns](https://refactoring.guru/design-patterns)
 - [Refactoring Guru — Refactoring](https://refactoring.guru/refactoring)

@@ -1,4 +1,4 @@
-# Week 21 — PHP Design Patterns Part 2 & PHP Error Handling Part 1
+# Week 21 — PHP Design Patterns Part 2, PHP Error Handling & PHP Modules and Namespaces
 
 ---
 
@@ -19,8 +19,25 @@
    - [php.ini — Where PHP Settings Live](#33-phpini--where-php-settings-live)
    - [Controlling Errors with error_reporting()](#34-controlling-errors-with-error_reporting)
    - [PHP Exception Handling — try/catch/throw](#35-php-exception-handling--trycatchthrow)
-4. [Patterns Summary Table](#4-patterns-summary-table)
-5. [References](#5-references)
+4. [PHP Error Handling Part 2](#4-php-error-handling-part-2)
+   - [Custom Exception Hierarchy](#41-custom-exception-hierarchy)
+   - [Exception Chaining](#42-exception-chaining)
+   - [PHP 7+ Throwable — Catching Everything](#43-php-7-throwable--catching-everything)
+   - [Custom Error Handler — set_error_handler()](#44-custom-error-handler--set_error_handler)
+   - [Global Exception Handler — set_exception_handler()](#45-global-exception-handler--set_exception_handler)
+   - [Error Handling Best Practices](#46-error-handling-best-practices)
+5. [PHP Modules and Namespaces](#5-php-modules-and-namespaces)
+   - [The Problem — Name Collisions](#51-the-problem--name-collisions)
+   - [PHP File Inclusion — include vs require](#52-php-file-inclusion--include-vs-require)
+   - [Namespaces — Organising Your Code](#53-namespaces--organising-your-code)
+   - [Global Namespace and Sub-Namespaces](#54-global-namespace-and-sub-namespaces)
+   - [use Keyword and Aliases](#55-use-keyword-and-aliases)
+   - [PSR-4 — PHP Standard Recommendation](#56-psr-4--php-standard-recommendation)
+   - [Class Autoloading — spl_autoload_register](#57-class-autoloading--spl_autoload_register)
+   - [Composer Autoloading](#58-composer-autoloading)
+   - [Real-World Project Structure](#59-real-world-project-structure)
+6. [Patterns Summary Table](#6-patterns-summary-table)
+7. [References](#7-references)
 
 ---
 
@@ -802,7 +819,770 @@ try {
 
 ---
 
-## 4. Patterns Summary Table
+## 4. PHP Error Handling Part 2
+
+### 4.1 Custom Exception Hierarchy
+
+In real projects you never just throw a generic `Exception`. You build a **hierarchy of custom exceptions** so each error type gets its own specific handling.
+
+```
+Exception (PHP built-in)
+├── AppException            ← base for all your app errors
+│   ├── ValidationException
+│   ├── NotFoundException
+│   ├── AuthException
+│   └── DatabaseException
+│       └── ConnectionException
+```
+
+```php
+declare(strict_types=1);
+
+// Base app exception — all your custom exceptions extend this
+class AppException extends Exception {}
+
+// Specific types
+class ValidationException extends AppException {}
+class NotFoundException    extends AppException {}
+class AuthException        extends AppException {}
+class DatabaseException    extends AppException {}
+class ConnectionException  extends DatabaseException {} // sub-type
+
+// Usage
+function findUser(int $id): array {
+    if ($id <= 0) {
+        throw new ValidationException("User ID must be a positive integer.");
+    }
+    $users = [1 => ['name' => 'Alice'], 2 => ['name' => 'Bob']];
+    if (!isset($users[$id])) {
+        throw new NotFoundException("User #$id does not exist.");
+    }
+    return $users[$id];
+}
+
+try {
+    $user = findUser(99);
+} catch (ValidationException $e) {
+    echo "❌ Validation: " . $e->getMessage();   // bad input
+} catch (NotFoundException $e) {
+    echo "🔍 Not Found: " . $e->getMessage();    // HTTP 404
+} catch (AppException $e) {
+    echo "⚠️ App Error: " . $e->getMessage();    // catch-all for app errors
+} catch (Exception $e) {
+    echo "💥 Unexpected: " . $e->getMessage();   // truly unexpected
+}
+```
+
+**Why this matters:**
+
+| Generic `Exception` | Custom Hierarchy |
+|---|---|
+| All errors look the same | Each error type has its own identity |
+| Hard to handle each case differently | Catch specific types with specific responses |
+| Poor error messages | Meaningful, context-rich messages |
+| Can't map to HTTP status codes easily | `NotFoundException` → 404, `AuthException` → 401 |
+
+---
+
+### 4.2 Exception Chaining
+
+Sometimes you catch a low-level exception and want to throw a higher-level one — but still **keep the original cause** for debugging. This is called **exception chaining**.
+
+```php
+class DatabaseException extends AppException {}
+
+function connectToDatabase(string $host): \PDO {
+    try {
+        // This throws a PDOException if connection fails
+        return new \PDO("mysql:host=$host;dbname=shop", "root", "wrongpassword");
+    } catch (\PDOException $e) {
+        // Wrap the low-level PDOException inside your app exception
+        // Pass $e as the 3rd argument → "previous exception"
+        throw new DatabaseException(
+            "Could not connect to the database.",
+            500,
+            $e  // ← the ORIGINAL cause is preserved here!
+        );
+    }
+}
+
+try {
+    connectToDatabase("localhost");
+} catch (DatabaseException $e) {
+    echo $e->getMessage();              // "Could not connect to the database."
+    echo $e->getPrevious()->getMessage(); // "SQLSTATE[HY000]..." ← original PDO error
+}
+```
+
+**Why chain exceptions?**
+
+```
+Low-level layer:     PDOException: "Access denied for user 'root'@'localhost'"
+                         ↓ wrapped into
+Business layer:      DatabaseException: "Could not connect to the database."
+                         ↓ caught by
+Controller/App:      Shows user: "Service temporarily unavailable."
+                     Logs:       Full original stack trace for developers
+```
+
+> 💡 **Real-world:** Laravel wraps low-level exceptions this way. When Eloquent can't connect, it throws a `QueryException` wrapping the original `PDOException` — your controller catches `QueryException`, the DBA reads the `PDOException`.
+
+---
+
+### 4.3 PHP 7+ Throwable — Catching Everything
+
+Before PHP 7, you could only catch `Exception`. PHP engine errors (like calling an undefined function) could **not** be caught.
+
+PHP 7 introduced the **`Throwable` interface**, which is the **parent of both `Exception` and `Error`**.
+
+```
+Throwable (interface)
+├── Exception   ← your code throws these
+│   ├── RuntimeException
+│   ├── InvalidArgumentException
+│   └── ... (all custom exceptions)
+└── Error       ← PHP engine throws these
+    ├── TypeError       (wrong type passed to typed function)
+    ├── ParseError      (syntax error at runtime eval)
+    ├── DivisionByZeroError
+    └── ArithmeticError
+```
+
+```php
+declare(strict_types=1);
+
+function divide(int $a, int $b): float {
+    return $a / $b;
+}
+
+// Catch an engine-level Error
+try {
+    divide(10, 0);
+} catch (\DivisionByZeroError $e) {
+    echo "Math Error: " . $e->getMessage();
+}
+
+// Catch a TypeError (strict_types catches this)
+try {
+    divide(10, "two");  // string passed where int expected
+} catch (\TypeError $e) {
+    echo "Type Error: " . $e->getMessage();
+}
+
+// Catch EVERYTHING — Exception or Error
+try {
+    someUndefinedFunction();
+} catch (\Throwable $t) {
+    echo get_class($t) . ": " . $t->getMessage();
+    // Error: Call to undefined function someUndefinedFunction()
+}
+```
+
+**Summary Table:**
+
+| Throwable | Thrown by | Example |
+|---|---|---|
+| `Exception` | Your code (`throw new`) | `throw new NotFoundException("...")` |
+| `RuntimeException` | Your code | Logic fails at runtime |
+| `TypeError` | PHP engine | Wrong type passed to typed function |
+| `DivisionByZeroError` | PHP engine | `10 / 0` with integers |
+| `Error` | PHP engine | Undefined function/class called |
+| `ParseError` | PHP engine | `eval()` with bad syntax |
+
+> 💡 **Best practice:** Use `catch (\Throwable $t)` only in top-level error handlers (global handler, framework bootstrap). In your business logic, always catch **specific** types.
+
+---
+
+### 4.4 Custom Error Handler — set_error_handler()
+
+PHP errors (E_WARNING, E_NOTICE, etc.) are NOT exceptions — you normally can't `try/catch` them. But you can **intercept them with a custom handler** and convert them to exceptions.
+
+```php
+// set_error_handler(callable $handler, int $errorTypes = E_ALL)
+set_error_handler(function (int $errno, string $errstr, string $errfile, int $errline): bool {
+    // Convert PHP error into an exception so it can be caught
+    throw new \ErrorException($errstr, $errno, $errno, $errfile, $errline);
+});
+
+// Now even E_WARNING becomes catchable!
+try {
+    include "does-not-exist.php"; // normally a Warning, script continues
+} catch (\ErrorException $e) {
+    echo "Caught a PHP error as exception: " . $e->getMessage();
+}
+```
+
+**Real-world use — catch only specific error levels:**
+
+```php
+// Only convert Warnings and Notices to exceptions (ignore Deprecated)
+set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+    throw new \ErrorException($errstr, 0, $errno, $errfile, $errline);
+}, E_WARNING | E_NOTICE);
+```
+
+**Parameters the handler receives:**
+
+| Parameter | What it contains |
+|---|---|
+| `$errno` | Error level number (e.g. `2` = E_WARNING) |
+| `$errstr` | Error message string |
+| `$errfile` | File where error occurred |
+| `$errline` | Line number where error occurred |
+| return `true` | Suppress PHP's default error handler |
+| return `false` | Also run PHP's default error handler |
+
+> 🌍 **Real-world:** Laravel's `bootstrap/app.php` calls `set_error_handler()` to convert all PHP errors into catchable exceptions — that's why you see proper error pages instead of raw PHP notices.
+
+---
+
+### 4.5 Global Exception Handler — set_exception_handler()
+
+If an exception goes **uncaught**, PHP shows a white screen of death. `set_exception_handler()` catches it as a **last resort**.
+
+```php
+set_exception_handler(function (\Throwable $e): void {
+    // 1. Log the full error for developers
+    error_log(
+        date('[Y-m-d H:i:s]') .
+        " [" . get_class($e) . "] " .
+        $e->getMessage() .
+        " in " . $e->getFile() . ":" . $e->getLine() .
+        "\n" . $e->getTraceAsString()
+    );
+
+    // 2. Show a friendly message to the user
+    http_response_code(500);
+    echo json_encode([
+        'error'   => 'An unexpected error occurred. Please try again.',
+        'code'    => $e->getCode(),
+    ]);
+});
+
+// Simulate an uncaught exception
+throw new \RuntimeException("Database connection failed completely.");
+// → User sees: {"error":"An unexpected error occurred..."}
+// → Log file has the full stack trace
+```
+
+**The full error handling pipeline:**
+
+```
+Code runs
+   │
+   ├── Exception thrown
+   │       │
+   │       ├── Caught by try/catch?  → YES → Handle gracefully, continue
+   │       │
+   │       └── NO → set_exception_handler() → Log + show friendly page → Stop
+   │
+   └── PHP Error (Warning/Notice)
+           │
+           ├── set_error_handler() set? → YES → Converted to ErrorException → try/catch
+           │
+           └── NO → PHP logs/displays it according to php.ini settings
+```
+
+---
+
+### 4.6 Error Handling Best Practices
+
+```
+✅ DO:
+  - Use declare(strict_types=1) in every file
+  - Build a custom exception hierarchy (AppException as base)
+  - Catch specific exception types, not just generic Exception
+  - Use finally for cleanup (close files, DB connections)
+  - Chain exceptions to preserve original cause
+  - Log full stack traces, show friendly messages to users
+  - Set a global set_exception_handler() as last resort
+  - Use set_error_handler() to convert PHP errors into exceptions
+
+❌ DON'T:
+  - catch (Exception $e) { } ← empty catch = swallowing errors silently
+  - Show raw PHP errors in production (display_errors = Off)
+  - Throw generic Exception — always use or create a specific type
+  - Log sensitive data (passwords, tokens) in error messages
+```
+
+**Real-World Scenario — E-Commerce Order Processing:**
+
+```php
+declare(strict_types=1);
+
+class OrderException      extends AppException {}
+class StockException      extends OrderException {}
+class PaymentDeclinedException extends OrderException {}
+
+function placeOrder(int $productId, int $qty, string $cardToken): string {
+    // 1. Check stock
+    $stock = ['product_1' => 5, 'product_2' => 0];
+    $key   = "product_$productId";
+
+    if (!isset($stock[$key])) {
+        throw new NotFoundException("Product #$productId not found.");
+    }
+    if ($stock[$key] < $qty) {
+        throw new StockException("Only {$stock[$key]} left in stock, $qty requested.");
+    }
+    // 2. Charge card
+    if ($cardToken === 'invalid') {
+        throw new PaymentDeclinedException("Card declined. Please try another card.");
+    }
+    return "Order confirmed! $qty × Product #$productId charged.";
+}
+
+try {
+    echo placeOrder(2, 1, 'valid_token');
+} catch (StockException $e) {
+    echo "🛒 Stock Issue: " . $e->getMessage();       // Inform user, suggest alternatives
+} catch (PaymentDeclinedException $e) {
+    echo "💳 Payment: " . $e->getMessage();            // Ask user to retry payment
+} catch (NotFoundException $e) {
+    echo "🔍 Not Found: " . $e->getMessage();          // HTTP 404
+} catch (AppException $e) {
+    error_log($e->getMessage());
+    echo "⚠️ Something went wrong. Please try again."; // Generic message for unknown errors
+} finally {
+    echo "\n[Audit] Order attempt logged.";            // Always log the attempt
+}
+```
+
+---
+
+## 5. PHP Modules and Namespaces
+
+### 5.1 The Problem — Name Collisions
+
+Imagine you have two third-party libraries and both define a class called `User`:
+
+```php
+// Library A: auth/User.php
+class User { /* handles authentication */ }
+
+// Library B: payment/User.php
+class User { /* handles payment profiles */ }
+
+// In your app:
+include 'auth/User.php';
+include 'payment/User.php'; // ❌ Fatal Error: Cannot redefine class User
+```
+
+This is the **name collision problem**. Without organising your code, class/function names from different files **clash**.
+
+**The solution: Namespaces** — like folders for your code names.
+
+```php
+// auth/User.php
+namespace Auth;
+class User { /* ... */ }
+
+// payment/User.php
+namespace Payment;
+class User { /* ... */ }
+
+// In your app:
+$authUser    = new Auth\User();    // ✅ No conflict
+$paymentUser = new Payment\User(); // ✅ No conflict
+```
+
+> 🌍 **Real-world analogy:** Think of namespaces like city districts. There can be a "Main Street" in New York AND a "Main Street" in London — they don't conflict because they're in different cities (namespaces). `NY\MainStreet` ≠ `London\MainStreet`.
+
+---
+
+### 5.2 PHP File Inclusion — include vs require
+
+Before namespaces and autoloading, PHP used file inclusion to bring code from other files into your script.
+
+**The four inclusion functions:**
+
+```php
+// include — loads file, shows WARNING if file not found, script CONTINUES
+include('Math.php');
+include 'Math.php'; // parentheses are optional
+
+// include_once — same as include, but won't load the file a 2nd time
+include_once('Math.php');
+include_once('Math.php'); // 2nd time → silently ignored ✅
+
+// require — loads file, shows FATAL ERROR if file not found, script STOPS
+require('Math.php');
+require 'Math.php';
+
+// require_once — same as require, but won't load the file a 2nd time
+require_once('Math.php');
+require_once('Math.php'); // 2nd time → silently ignored ✅
+```
+
+**When to use which:**
+
+| Function | File missing → | Use for |
+|---|---|---|
+| `include` | Warning, continues | Optional template files (header, footer) |
+| `include_once` | Warning, continues | Shared helpers that might be included multiple times |
+| `require` | Fatal error, stops | Critical files your app cannot work without |
+| `require_once` | Fatal error, stops | Class files, config files — load exactly once |
+
+```php
+// ✅ Good practice
+require_once 'config.php';    // app cannot run without config
+require_once 'Database.php';  // app cannot run without DB class
+include 'header.php';         // template — missing is recoverable
+```
+
+---
+
+### 5.3 Namespaces — Organising Your Code
+
+A **namespace** is a virtual container that groups related classes, functions, and constants together.
+
+**Declaring a namespace — must be first thing in the file:**
+
+```php
+<?php
+// Math.php
+namespace Math\Basic; // ← declare BEFORE any other code (except declare())
+
+function add($a, $b) {
+    return $a + $b;
+}
+
+define('PI', 3.14); // ← constants defined with define() are GLOBAL
+// use const keyword for namespaced constants:
+const TAX_RATE = 0.1; // ← this IS namespaced: Math\Basic\TAX_RATE
+```
+
+**From your `Math.php`:**
+
+```php
+<?php
+namespace Math\Basic;
+
+define('PI', 3.14);      // global (not recommended inside namespace)
+
+function add($a, $b) {
+    echo $a + $b;
+}
+```
+
+**Using namespaced code in another file:**
+
+```php
+<?php
+// App.php
+include('Math.php');
+include('Calculator.php');
+
+// Full qualified name — namespace\FunctionOrClass
+echo Math\add(1, 2);             // calls Math\Basic\add... wait
+// Actually if Math.php has namespace Math\Basic:
+echo Math\Basic\add(1, 2);       // ✅ Fully Qualified Name (FQN)
+echo \Math\Basic\add(1, 2);      // ✅ with leading \ = absolute path
+```
+
+**From your `App.php` code:**
+
+```php
+include('Math.php');       // namespace Math\Basic
+include('Calculator.php'); // namespace Calculator
+
+echo Math\add(1, 2);           // if App.php has no namespace → looks for Math\add
+echo Calculator\add([1, 2, 3]); // looks for Calculator\add
+```
+
+---
+
+### 5.4 Global Namespace and Sub-Namespaces
+
+**Global Namespace (Root):**
+
+The leading backslash `\` always refers to the **global (root) namespace**:
+
+```php
+namespace MyApp;
+
+// PHP built-in classes are in global namespace
+$dt = new \DateTime();      // ✅ Must use \ to access global DateTime
+$dt = new DateTime();       // ❌ looks for MyApp\DateTime — doesn't exist!
+
+// PHP built-in functions don't need \ but it's more explicit:
+$arr = \array_merge([1], [2]); // ✅
+$arr = array_merge([1], [2]);  // ✅ also works (PHP fallbacks to global for functions)
+```
+
+> Your `App.php` comment: `// \ -> Global Namespace or Root Namespace`
+
+**Sub-Namespaces:**
+
+You can nest namespaces like folder paths:
+
+```php
+<?php
+// Basic.php
+namespace Math\Basic;    // ← Math is parent, Basic is child
+
+function add($a, $b) {
+    return $a + $b;
+}
+```
+
+```php
+<?php
+// App.php
+namespace Math;          // ← App.php is in namespace Math
+
+include('Basic.php');   // Basic.php is namespace Math\Basic
+
+echo Basic\add(1, 2);   // ← inside Math namespace, Basic\add() means Math\Basic\add() ✅
+
+// From global scope (no namespace declared), the call would be:
+echo Math\Basic\add(1, 2);
+```
+
+> Your `App.php` comment: `//Math\Calculator\add()` — shows the full qualified path structure.
+
+**Visual structure:**
+
+```
+Namespace Hierarchy:
+Library
+└── Helper
+    └── Math
+        └── Basic
+            └── Calculator   →  Library\Helper\Math\Basic\Calculator
+```
+
+---
+
+### 5.5 use Keyword and Aliases
+
+Typing `Library\Helper\Math\Basic\Calculator` every time is tedious. The `use` keyword imports a namespace or class into the current scope — like creating a shortcut.
+
+```php
+<?php
+include('Calculator.php'); // namespace Library\Helper\Math\Basic
+
+// Import the Calculator class
+use Library\Helper\Math\Basic\Calculator;
+
+$calc = new Calculator; // ✅ no need to write full path
+echo $calc->add([1, 2, 3]);
+```
+
+**Aliases — `use ... as ...`:**
+
+From your `App.php`:
+
+```php
+// git aliases: git status → gs, git add → ga, git commit → gc
+// PHP class aliases work the same way!
+
+use Library\Helper\Math\Basic\Calculator as Math;
+
+$calc1 = new Math;   // ✅ short alias instead of full namespace
+$calc2 = new Math;
+```
+
+**Aliasing functions and constants:**
+
+```php
+use function Math\Basic\add as mathAdd;
+use const Math\Basic\TAX_RATE as TAX;
+
+mathAdd(1, 2);  // calls Math\Basic\add
+echo TAX;       // Math\Basic\TAX_RATE
+```
+
+**Multiple use statements:**
+
+```php
+use App\Models\User;
+use App\Models\Product;
+use App\Services\CartService;
+use App\Helpers\StringHelper as Str; // alias
+```
+
+---
+
+### 5.6 PSR-4 — PHP Standard Recommendation
+
+**PSR-4** is the official PHP community standard for **autoloading classes**. It defines a strict mapping between **namespace structure** and **directory structure**.
+
+```
+Rule: Namespace path must match directory path exactly.
+
+Namespace: Library\Helper\Calculator
+File path:  Library/Helper/Calculator.php
+
+Namespace: App\Models\User
+File path:  App/Models/User.php (or src/App/Models/User.php with a prefix)
+```
+
+**PSR-4 Naming Rules:**
+
+From your `App.php`:
+
+```php
+// Class Name, Namespace - Capital Case - Math, CarFactory, UserViewManager
+//   → same applies to Interface, Traits
+
+// File name must match the class name exactly:
+//   CarFactory class → CarFactory.php
+//   UserViewManager class → UserViewManager.php
+
+// Namespace must mirror directory structure:
+//   namespace Library\Helper\Math\Basic → file at Library/Helper/Math/Basic/ClassName.php
+```
+
+**PSR-4 Example:**
+
+```
+project/
+├── App/
+│   ├── Models/
+│   │   └── User.php          → namespace App\Models;  class User {}
+│   └── Services/
+│       └── CartService.php   → namespace App\Services; class CartService {}
+└── index.php
+```
+
+```php
+// User.php
+namespace App\Models;
+class User {
+    public string $name;
+    public string $email;
+}
+
+// CartService.php
+namespace App\Services;
+use App\Models\User;
+
+class CartService {
+    public function getCartFor(User $user): array { /* ... */ }
+}
+```
+
+---
+
+### 5.7 Class Autoloading — spl_autoload_register
+
+Without autoloading, you must `require_once` every class file at the top of every script — tedious and error-prone. **Autoloading** tells PHP: *"When you need a class you don't know about yet, run this function to find and load it."*
+
+**Your `autoload.php`:**
+
+```php
+<?php
+spl_autoload_register(function ($class) {
+    // $class = "Library\Helper\Calculator"
+    // Convert namespace to path: Library\Helper\Calculator → Library/Helper/Calculator
+    $class = str_replace("\\", "/", $class);
+    include($class . ".php");
+    // includes Library/Helper/Calculator.php automatically!
+});
+```
+
+**How it works step by step:**
+
+```
+1. PHP encounters: new Library\Helper\Calculator
+2. Class not loaded yet → PHP fires autoloader
+3. Autoloader runs: "Library\Helper\Calculator" passed to function
+4. str_replace turns \ into /  → "Library/Helper/Calculator"
+5. include("Library/Helper/Calculator.php")  → file loaded!
+6. Class now available → object created ✅
+```
+
+**Your `App.php` final working example:**
+
+```php
+<?php
+// App.php
+include('autoload.php');         // register the autoloader once
+use Library\Helper\Calculator;  // just the alias — no require needed!
+
+$calc = new Calculator;          // autoloader finds & loads Calculator.php automatically
+echo $calc->add([1, 2, 3]);     // 6
+```
+
+**Multiple autoloaders:**
+
+```php
+spl_autoload_register(function ($class) { /* loader 1 */ });
+spl_autoload_register(function ($class) { /* loader 2 */ });
+// PHP runs them in order until the class is found
+```
+
+---
+
+### 5.8 Composer Autoloading
+
+**Composer** is PHP's dependency manager (like npm for Node.js). It also generates a PSR-4 compliant autoloader automatically — far more robust than a hand-written one.
+
+**`composer.json`:**
+
+```json
+{
+    "autoload": {
+        "psr-4": {
+            "App\\": "App/"
+        }
+    }
+}
+```
+
+```
+This tells Composer:
+  Any class starting with namespace "App\" → look in the "App/" folder.
+```
+
+**After running `composer dump-autoload`:**
+
+```php
+<?php
+// index.php
+require 'vendor/autoload.php'; // Composer's generated autoloader (replaces your autoload.php!)
+
+use App\Models\User;
+use App\Services\CartService;
+
+$user = new User();           // Composer loads App/Models/User.php automatically
+$cart = new CartService();    // Composer loads App/Services/CartService.php automatically
+```
+
+**Why use Composer over hand-written autoloader?**
+
+| Hand-written autoloader | Composer autoloader |
+|---|---|
+| You write and maintain it | Generated automatically |
+| Simple — one strategy | Supports PSR-4, PSR-0, classmap, files |
+| No third-party package support | Loads ALL installed packages too |
+| Easy to break | Highly optimised, production-ready |
+
+> 💡 **In production,** run `composer dump-autoload --optimize` for a cached classmap that's 10x faster.
+
+---
+
+### 5.9 Real-World Project Structure
+
+See the `PHP-Modules-Namespaces/` folder in this week's directory for a complete working example of a mini e-commerce module using:
+- PSR-4 namespaces matching directory structure
+- Custom autoloader (spl_autoload_register)
+- Separate modules: Models, Services, Helpers, Exceptions
+- Real-world use cases: User registration, Cart management, Payment processing
+
+The folder contains:
+- `README.md` — Explanation of the project structure and concepts
+- `index.php` — Entry point / bootstrapper
+- `autoload.php` — Custom PSR-4 autoloader
+- `App/Models/` — User, Product models
+- `App/Services/` — CartService, PaymentService
+- `App/Helpers/` — StringHelper
+- `App/Exceptions/` — Custom exception hierarchy
+
+---
+
+## 6. Patterns Summary Table
 
 | Pattern | Category | Core Idea | Real-World Analogy |
 |---|---|---|---|
@@ -817,7 +1597,7 @@ try {
 
 ---
 
-## 5. References
+## 7. References
 
 - [Repository Pattern — Eric Evans, Domain-Driven Design](https://martinfowler.com/eaaCatalog/repository.html)
 - [Dependency Injection Demystified — James Shore](https://www.jamesshore.com/v2/blog/2006/dependency-injection-demystified)
@@ -825,6 +1605,13 @@ try {
 - [PHP Error Handling — php.net](https://www.php.net/manual/en/book.errorfunc.php)
 - [PHP Exceptions — php.net](https://www.php.net/manual/en/language.exceptions.php)
 - [PHP Error Types — php.net](https://www.php.net/manual/en/errorfunc.constants.php)
+- [PHP Throwable — php.net](https://www.php.net/manual/en/class.throwable.php)
+- [set_error_handler — php.net](https://www.php.net/manual/en/function.set-error-handler.php)
+- [set_exception_handler — php.net](https://www.php.net/manual/en/function.set-exception-handler.php)
+- [PHP Namespaces — php.net](https://www.php.net/manual/en/language.namespaces.php)
+- [PSR-4 Autoloading Standard](https://www.php-fig.org/psr/psr-4/)
+- [spl_autoload_register — php.net](https://www.php.net/manual/en/function.spl-autoload-register.php)
+- [Composer Autoloading](https://getcomposer.org/doc/04-schema.md#autoload)
 - [Refactoring Guru — Design Patterns](https://refactoring.guru/design-patterns)
 - [OODesign — Design Principles](https://www.oodesign.com/design-principles/)
 - [Design Patterns for Humans — kamranahmedse](https://github.com/kamranahmedse/design-patterns-for-humans)

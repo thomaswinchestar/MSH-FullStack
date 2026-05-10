@@ -1,4 +1,4 @@
-# Week-22 Notes: PHP Composer & HTTP Requests
+# Week-22 Notes: PHP Composer, HTTP Requests, Cookies & Sessions
 
 ## Table of Contents
 1. [PHP Composer](#1-php-composer)
@@ -19,7 +19,30 @@
    - 2.6 [URL Parsing, Encoding & Decoding](#26-url-parsing-encoding--decoding)
    - 2.7 [HTML Form Example](#27-html-form-example)
    - 2.8 [Real-World Scenarios](#28-real-world-scenarios)
-3. [References](#3-references)
+3. [PHP Cookies](#3-php-cookies)
+   - 3.1 [What is a Cookie?](#31-what-is-a-cookie)
+   - 3.2 [How Cookies Work](#32-how-cookies-work)
+   - 3.3 [setcookie() – Creating Cookies](#33-setcookie--creating-cookies)
+   - 3.4 [$_COOKIE – Reading Cookies](#34-_cookie--reading-cookies)
+   - 3.5 [Deleting a Cookie](#35-deleting-a-cookie)
+   - 3.6 [Cookie Path & Scope](#36-cookie-path--scope)
+   - 3.7 [Cookies vs. Sessions – Quick Preview](#37-cookies-vs-sessions--quick-preview)
+   - 3.8 [Real-World Scenarios](#38-real-world-scenarios)
+4. [PHP Sessions](#4-php-sessions)
+   - 4.1 [What is a Session?](#41-what-is-a-session)
+   - 4.2 [How Sessions Work Under the Hood](#42-how-sessions-work-under-the-hood)
+   - 4.3 [session_start() – Starting a Session](#43-session_start--starting-a-session)
+   - 4.4 [$_SESSION – Storing & Reading Data](#44-_session--storing--reading-data)
+   - 4.5 [Destroying a Session (Logout)](#45-destroying-a-session-logout)
+   - 4.6 [Cookies vs Sessions – Full Comparison](#46-cookies-vs-sessions--full-comparison)
+   - 4.7 [Real-World Scenarios](#47-real-world-scenarios)
+5. [Mini Project – Login System with Sessions](#5-mini-project--login-system-with-sessions)
+   - 5.1 [Project Overview](#51-project-overview)
+   - 5.2 [Project File Structure](#52-project-file-structure)
+   - 5.3 [How It All Connects](#53-how-it-all-connects)
+   - 5.4 [Key Concepts Demonstrated](#54-key-concepts-demonstrated)
+   - 5.5 [Real-World Expansion Ideas](#55-real-world-expansion-ideas)
+6. [References](#6-references)
 
 ---
 
@@ -678,7 +701,725 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 ---
 
-## 3. References
+---
+
+## 3. PHP Cookies
+
+### 3.1 What is a Cookie?
+
+A **cookie** is a small piece of text data that a web server stores **in the user's browser**. Every time the user visits the same website, the browser automatically sends those cookies back to the server.
+
+> **Real-World Analogy**: Think of a cookie like a **membership stamp on your hand** at an event. When you come back in, the staff sees the stamp and knows you've already paid — they don't need to ask again.
+
+**What cookies are used for:**
+- Remembering a logged-in user ("Remember Me")
+- Saving user preferences (theme, language, currency)
+- Tracking shopping carts across visits
+- Analytics and ad personalisation (Google Ads, Facebook Pixel)
+
+**Key facts:**
+- Cookies are stored **in the browser** (client-side)
+- They are sent with **every HTTP request** to the same domain
+- Each cookie has a **name, value, and expiry time**
+- Cookies contain **text only** (not arrays/objects directly)
+- Max size: ~**4 KB** per cookie
+
+---
+
+### 3.2 How Cookies Work
+
+```
+FIRST VISIT:
+  Browser ──── GET /page.php ────────────────────► PHP Server
+  Browser ◄─── Set-Cookie: theme=dark; Expires=... ─ PHP Server
+                  ↓
+              Browser saves cookie
+
+NEXT VISIT (same domain):
+  Browser ──── GET /page.php + Cookie: theme=dark ► PHP Server
+                                                      PHP reads $_COOKIE['theme'] = 'dark'
+```
+
+1. **PHP sets the cookie** using `setcookie()` — the server sends a `Set-Cookie` header in the response
+2. **Browser stores the cookie** associated with that domain
+3. **On the next request**, the browser automatically attaches the cookie in the `Cookie` header
+4. **PHP reads it** from `$_COOKIE` superglobal
+
+---
+
+### 3.3 setcookie() – Creating Cookies
+
+```php
+setcookie(name, value, expires, path, domain, secure, httponly);
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | string | Cookie name (key) |
+| `value` | string | Cookie value (text only) |
+| `expires` | int | Unix timestamp when cookie expires. `0` = session cookie (until browser closes) |
+| `path` | string | URL path where the cookie is valid. `"/"` = entire site |
+| `domain` | string | Domain scope (e.g., `.example.com`) |
+| `secure` | bool | Only send over HTTPS if `true` |
+| `httponly` | bool | If `true`, JS cannot access this cookie (prevents XSS theft) |
+
+**Examples from class:**
+
+```php
+<?php
+// Set a cookie that lasts 1 hour (3600 seconds from now)
+setcookie("name", "mgmg", time() + 3600);
+
+// Set a cookie with no expiry time → session cookie (gone when browser closes)
+setcookie("theme", "lightgrey");
+
+// Set a cookie only available on /form/ path
+setcookie("path", "cookie", time() + 3600, "/form/");
+
+// Delete a cookie → set expiry to the past
+setcookie("name", "", time() - 1);
+```
+
+> **Important**: `setcookie()` must be called **before any HTML output** (`echo`, whitespace, HTML tags). It works by sending an HTTP header, and headers must be sent first.
+
+```php
+<?php
+// ✅ Correct — setcookie before any output
+setcookie("user", "John", time() + 86400);
+echo "Cookie set!";
+
+// ❌ Wrong — output before setcookie causes "headers already sent" error
+echo "Hello";
+setcookie("user", "John", time() + 86400); // ERROR!
+```
+
+---
+
+### 3.4 $_COOKIE – Reading Cookies
+
+`$_COOKIE` is a **PHP superglobal** that holds all cookies sent by the browser for the current request.
+
+```php
+<?php
+// view-cookie.php
+print_r($_COOKIE);
+// Array
+// (
+//     [theme] => lightgrey
+//     [name]  => mgmg
+// )
+
+// Access a single cookie safely:
+$theme = $_COOKIE['theme'] ?? 'default';
+$userName = $_COOKIE['name'] ?? 'Guest';
+
+echo "Welcome $userName! Your theme is: $theme";
+```
+
+> **Note**: A cookie you just set with `setcookie()` in the **same request** is NOT yet available in `$_COOKIE`. It becomes available on the **next request** because the browser must receive it first, then send it back.
+
+```php
+<?php
+setcookie("color", "blue", time() + 3600);
+
+// This will NOT work in the same request:
+echo $_COOKIE['color']; // undefined!
+
+// But this works after the next page load:
+echo $_COOKIE['color'] ?? 'not set yet'; // "blue" on next request
+```
+
+---
+
+### 3.5 Deleting a Cookie
+
+To delete a cookie, set its expiry to a time **in the past**:
+
+```php
+<?php
+// Delete the "name" cookie — set expiry to 1 second ago
+setcookie("name", "", time() - 1);
+
+// Also unset from the current request's $_COOKIE array:
+unset($_COOKIE['name']);
+```
+
+> After calling this, the browser will discard the cookie on its next response. The `$_COOKIE` array still has the old value until you `unset()` it manually.
+
+---
+
+### 3.6 Cookie Path & Scope
+
+The **path** parameter controls which URLs the cookie is sent to:
+
+```php
+// Available on ALL pages of the site
+setcookie("user", "John", time() + 3600, "/");
+
+// Only available on /admin/ pages
+setcookie("admin_token", "abc123", time() + 3600, "/admin/");
+
+// Only available on /form/ pages (from class example)
+setcookie("path", "cookie", time() + 3600, "/form/");
+```
+
+```
+Domain: example.com
+
+setcookie(..., path: "/")        → cookie sent to ALL requests
+setcookie(..., path: "/admin/")  → only sent to /admin/dashboard, /admin/users, etc.
+                                   NOT sent to /shop or /home
+```
+
+**Secure Cookies (HTTPS only):**
+```php
+// Only send over HTTPS — never over HTTP
+setcookie("session_token", "xyz", time() + 3600, "/", "", true, true);
+//                                                        ^^^^  ^^^^
+//                                                        secure httponly
+```
+
+---
+
+### 3.7 Cookies vs. Sessions – Quick Preview
+
+| | Cookie | Session |
+|---|---|---|
+| Where stored? | Browser (client) | Server |
+| Data type | Text only | Array, Object, any PHP type |
+| Expiry | You set it | Until browser closes (default) |
+| Can user see/edit? | ✅ Yes (insecure) | ❌ No (server-side) |
+| Max size | ~4 KB | Limited by server memory |
+| Best for | Preferences, "Remember me" | Login state, cart, sensitive data |
+
+*(Full comparison in Section 4.6)*
+
+---
+
+### 3.8 Real-World Scenarios
+
+**Scenario 1 – Remember User Theme Preference**
+```php
+// Save theme preference when user changes it:
+setcookie("theme", "dark", time() + (86400 * 30), "/"); // 30 days
+
+// On every page load, apply the saved theme:
+$theme = $_COOKIE['theme'] ?? 'light';
+echo "<body class='theme-$theme'>";
+```
+
+**Scenario 2 – "Remember Me" Login**
+```php
+// After successful login, if user checked "Remember Me":
+if (isset($_POST['remember_me'])) {
+    setcookie("remember_token", $token, time() + (86400 * 30), "/", "", true, true);
+}
+
+// On next visit, check if remember token exists:
+if (isset($_COOKIE['remember_token'])) {
+    $user = getUserByToken($_COOKIE['remember_token']);
+    if ($user) {
+        $_SESSION['user'] = $user; // auto-login
+    }
+}
+```
+
+**Scenario 3 – Shopping Cart (Guest User)**
+```php
+// Store cart item count in cookie for non-logged-in users:
+$cart = json_decode($_COOKIE['cart'] ?? '[]', true);
+$cart[] = ['product_id' => 42, 'qty' => 1];
+setcookie("cart", json_encode($cart), time() + 86400, "/");
+```
+
+**Scenario 4 – Language Preference**
+```php
+$availableLangs = ['en', 'mm', 'zh', 'ja'];
+
+// User clicks "Change to Burmese":
+if (isset($_GET['lang']) && in_array($_GET['lang'], $availableLangs)) {
+    setcookie("lang", $_GET['lang'], time() + (86400 * 365), "/");
+    header("Location: " . $_SERVER['HTTP_REFERER']);
+    exit;
+}
+
+$lang = $_COOKIE['lang'] ?? 'en';
+```
+
+---
+
+## 4. PHP Sessions
+
+### 4.1 What is a Session?
+
+A **session** is a way to store data on the **server** that persists across multiple page requests from the same user.
+
+While cookies store data in the browser, sessions store data securely on the server — the browser only holds a **session ID** (a random token), not the actual data.
+
+> **Real-World Analogy**: Think of a session like a **coat check at a restaurant**. When you arrive, the cloakroom gives you a **ticket number** (session ID). They keep your actual coat (data) locked in the back room (server). When you leave, you show your ticket and get your coat back. Nobody can access your coat without your exact ticket.
+
+**Why sessions are better than cookies for sensitive data:**
+- The actual data (username, role, cart items) stays on the server
+- The browser only sees a random ID like `PHPSESSID=abc123xyz` — meaningless on its own
+- Users cannot fake or edit session data (unlike cookies which can be manually changed)
+
+---
+
+### 4.2 How Sessions Work Under the Hood
+
+```
+STEP 1 — User visits login page and submits form:
+  Browser ──── POST /login.php (email + password) ────► PHP Server
+
+STEP 2 — PHP verifies credentials and starts session:
+  PHP: session_start()                     ← starts session system
+  PHP: $_SESSION['user'] = 'John'          ← stores data on SERVER
+  PHP generates: PHPSESSID = "a1b2c3d4e5"  ← random unique ID
+  PHP: Set-Cookie: PHPSESSID=a1b2c3d4e5   ← sends ID to browser
+
+STEP 3 — Browser stores the session ID cookie:
+  Browser saves: PHPSESSID=a1b2c3d4e5
+
+STEP 4 — User visits profile page:
+  Browser ──── GET /profile.php + Cookie: PHPSESSID=a1b2c3d4e5 ─► PHP
+  PHP: session_start()                     ← reads PHPSESSID from cookie
+  PHP: looks up session file on server     ← finds data for a1b2c3d4e5
+  PHP: $_SESSION['user'] = 'John'          ← data restored automatically!
+
+STEP 5 — On logout:
+  PHP: session_destroy()                   ← deletes session file from server
+  PHPSESSID cookie becomes useless
+```
+
+**Key facts about PHPSESSID:**
+- Auto-generated by PHP — a random, unpredictable hash
+- Stored as a **cookie** in the browser (but only contains the ID, not the data)
+- Cannot be faked — guessing someone else's session ID is practically impossible
+- Session **data** is stored in files on the server (default: `/tmp/` directory)
+- Sessions have **no set expiry time** — they expire when the browser closes (unless you configure otherwise)
+
+---
+
+### 4.3 session_start() – Starting a Session
+
+`session_start()` must be called at the **top of every PHP file** that uses sessions, before any HTML output.
+
+```php
+<?php
+session_start(); // ← MUST be first line (before any output)
+
+// Now $_SESSION is available
+$_SESSION['user'] = ['username' => 'John Doe'];
+echo "Session started!";
+```
+
+> **Important**: Just like `setcookie()`, `session_start()` sends HTTP headers. It must be called **before** any `echo`, HTML, or whitespace output.
+
+---
+
+### 4.4 $_SESSION – Storing & Reading Data
+
+`$_SESSION` is a PHP superglobal array that persists across requests for the same user.
+
+```php
+<?php
+// _actions/login.php — after verifying credentials:
+session_start();
+
+$email    = $_POST["email"];
+$password = $_POST["password"];
+
+// Simple credential check (in real apps: check against database)
+if ($email === 'john.doe@gmail.com' && $password === '123456') {
+
+    // Store user data in session (server-side, safe!)
+    $_SESSION['user'] = ['username' => 'John Doe'];
+
+    // Redirect to profile page
+    header('location: ../profile.php');
+    exit;
+
+} else {
+    // Wrong credentials - redirect back with error flag
+    header('location: ../index.php?incorrect=1');
+    exit;
+}
+```
+
+```php
+<?php
+// profile.php — accessing session data:
+session_start();
+
+// Guard clause: if not logged in, redirect to login
+if (!isset($_SESSION['user'])) {
+    header('location: index.php');
+    exit(); // Always exit after header redirect!
+}
+
+// Now safe to use session data:
+$user = $_SESSION['user'];
+echo "Welcome, " . $user['username'];
+```
+
+**Storing different data types:**
+```php
+<?php
+session_start();
+
+// String
+$_SESSION['username'] = 'John Doe';
+
+// Integer
+$_SESSION['user_id'] = 42;
+
+// Array (unlike cookies, sessions support full PHP types!)
+$_SESSION['user'] = [
+    'id'       => 42,
+    'username' => 'John Doe',
+    'role'     => 'admin',
+    'email'    => 'john@example.com'
+];
+
+// Nested array (shopping cart)
+$_SESSION['cart'] = [
+    ['product_id' => 1, 'name' => 'Laptop', 'qty' => 1, 'price' => 999.00],
+    ['product_id' => 5, 'name' => 'Mouse',  'qty' => 2, 'price' => 25.00],
+];
+
+// Remove a single session variable:
+unset($_SESSION['username']);
+```
+
+---
+
+### 4.5 Destroying a Session (Logout)
+
+To properly log a user out, you must:
+1. Start the session (to access it)
+2. Clear all session data
+3. Destroy the session
+4. Optionally delete the session cookie
+
+```php
+<?php
+// _actions/logout.php
+session_start();
+
+// Step 1: Clear all session variables
+$_SESSION = [];
+
+// Step 2: Delete the session cookie (PHPSESSID) from the browser
+if (ini_get("session.use_cookies")) {
+    $params = session_get_cookie_params();
+    setcookie(
+        session_name(), '',
+        time() - 42000,
+        $params["path"],
+        $params["domain"],
+        $params["secure"],
+        $params["httponly"]
+    );
+}
+
+// Step 3: Destroy the session data on the server
+session_destroy();
+
+// Step 4: Redirect to login page
+header('location: ../index.php');
+exit;
+```
+
+**Quick version (sufficient for most cases):**
+```php
+<?php
+session_start();
+session_destroy();
+header('location: ../index.php');
+exit;
+```
+
+---
+
+### 4.6 Cookies vs Sessions – Full Comparison
+
+| Feature | Cookies | Sessions |
+|---------|---------|---------|
+| **Storage location** | Browser (client-side) | Server (server-side) |
+| **Data types** | Text / strings only | Any PHP type (arrays, objects) |
+| **Max size** | ~4 KB per cookie | Limited by server memory/disk |
+| **Expiry** | You set it (can be days/years) | Browser close (default) |
+| **Security** | User can see & edit in browser | User only sees a random ID |
+| **Accessible by JS?** | Yes (unless httponly) | No (server-side only) |
+| **Travels with request?** | Yes (every request) | Only the PHPSESSID cookie travels |
+| **Best for** | Preferences, "remember me", theme, language, analytics | Login state, shopping cart, sensitive user data, roles |
+| **PHP variable** | `$_COOKIE` | `$_SESSION` |
+| **Set with** | `setcookie()` | `session_start()` + `$_SESSION[]=` |
+| **Delete with** | `setcookie(..., time()-1)` | `session_destroy()` |
+
+**When to use which:**
+
+```
+Use COOKIES when:
+  ✅ Data is not sensitive (theme, language, currency)
+  ✅ Data needs to persist after browser is closed
+  ✅ You want the user to be able to clear it themselves
+  ✅ Small data (under 4KB)
+
+Use SESSIONS when:
+  ✅ Data is sensitive (user ID, role, auth status)
+  ✅ Data involves arrays/objects (cart items, user profile)
+  ✅ You need server-side control (force logout across all tabs)
+  ✅ Security matters — user should NOT be able to edit the data
+```
+
+---
+
+### 4.7 Real-World Scenarios
+
+**Scenario 1 – User Authentication (Login/Logout Flow)**
+```
+User fills login form
+    → POST to login.php
+    → PHP checks email + password
+    → If valid: session_start(), $_SESSION['user'] = [...], redirect to dashboard
+    → If invalid: redirect back with ?error=1
+
+On every protected page:
+    → session_start()
+    → if (!isset($_SESSION['user'])) → redirect to login
+    → else → show page with user data
+
+On logout:
+    → session_start(), session_destroy(), redirect to login
+```
+
+**Scenario 2 – Role-Based Access Control**
+```php
+session_start();
+
+$user = $_SESSION['user'] ?? null;
+
+if (!$user) {
+    header('location: /login');
+    exit;
+}
+
+// Check role
+if ($user['role'] !== 'admin') {
+    header('location: /403-forbidden');
+    exit;
+}
+
+// Only admins reach here
+echo "Admin Dashboard";
+```
+
+**Scenario 3 – Shopping Cart with Sessions**
+```php
+session_start();
+
+// Add item to cart
+if ($_POST['action'] === 'add') {
+    $productId = (int) $_POST['product_id'];
+    $_SESSION['cart'][$productId] = ($_SESSION['cart'][$productId] ?? 0) + 1;
+}
+
+// Remove item from cart
+if ($_POST['action'] === 'remove') {
+    $productId = (int) $_POST['product_id'];
+    unset($_SESSION['cart'][$productId]);
+}
+
+// Display cart
+foreach ($_SESSION['cart'] as $id => $qty) {
+    echo "Product #$id — Qty: $qty <br>";
+}
+```
+
+**Scenario 4 – Flash Messages (one-time notifications)**
+```php
+// After form submit, store message in session:
+$_SESSION['flash'] = ['type' => 'success', 'msg' => 'Profile updated!'];
+header('location: profile.php');
+exit;
+
+// On profile.php — show and immediately remove:
+session_start();
+if (isset($_SESSION['flash'])) {
+    $flash = $_SESSION['flash'];
+    unset($_SESSION['flash']); // show only once
+    echo "<div class='alert alert-{$flash['type']}'>{$flash['msg']}</div>";
+}
+```
+
+---
+
+## 5. Mini Project – Login System with Sessions
+
+### 5.1 Project Overview
+
+The **`project/`** folder contains an ongoing mini web application that demonstrates cookies and sessions in a realistic context:
+
+**What it does:**
+- User visits the **login page** (`index.php`) — a clean Bootstrap form
+- User enters hardcoded credentials (`john.doe@gmail.com` / `123456`)
+- PHP verifies credentials, creates a session, and redirects to the **profile page**
+- Profile page is **protected** — only accessible if logged in (session guard)
+- If not logged in, user gets redirected back to login instantly
+- A **logout** link ends the session
+
+---
+
+### 5.2 Project File Structure
+
+```
+project/
+│
+├── index.php              ← Login page (form + error message display)
+├── profile.php            ← Protected page (requires active session)
+├── register.php           ← Registration page (ongoing — not complete yet)
+│
+├── _actions/
+│   ├── login.php          ← Processes POST form, starts session, redirects
+│   └── logout.php         ← Destroys session, redirects to login (ongoing)
+│
+└── css/
+    └── bootstrap.min.css  ← Bootstrap for styling
+```
+
+---
+
+### 5.3 How It All Connects
+
+**Step-by-step flow:**
+
+```
+1. User opens index.php (Login Page)
+   └─ Shows Bootstrap login form
+   └─ If ?incorrect=1 in URL → shows "Incorrect Email or Password" alert
+
+2. User submits form → POST to _actions/login.php
+   └─ session_start()
+   └─ Reads $_POST['email'] and $_POST['password']
+   └─ Checks: email === 'john.doe@gmail.com' AND password === '123456'
+   └─ ✅ Match  → $_SESSION['user'] = ['username' => 'John Doe']
+                  header('location: ../profile.php')
+   └─ ❌ No match → header('location: ../index.php?incorrect=1')
+
+3. profile.php loads
+   └─ session_start()
+   └─ if(!isset($_SESSION['user'])) → redirect to index.php  (GUARD)
+   └─ If session exists → show profile content
+   └─ Shows hardcoded name, email, phone, address (to be made dynamic)
+   └─ "Logout" link → _actions/logout.php
+
+4. logout.php (ongoing)
+   └─ session_start()
+   └─ session_destroy()
+   └─ header('location: ../index.php')
+```
+
+**Code breakdown – login.php (action):**
+```php
+<?php
+session_start();
+
+$email    = $_POST["email"];
+$password = $_POST["password"];
+
+if ($email === 'john.doe@gmail.com' and $password === '123456') {
+    $_SESSION['user'] = ['username' => 'John Doe'];  // store in session
+    header('location: ../profile.php');               // go to protected page
+} else {
+    header('location: ../index.php?incorrect=1');     // back to login + error flag
+}
+```
+
+**Code breakdown – profile.php (protected page):**
+```php
+<?php
+session_start();
+if (!isset($_SESSION['user'])) {
+    header('location: index.php');
+    exit(); // ALWAYS exit() after header redirect!
+}
+// Past this point = user is authenticated
+```
+
+**The login error display in index.php:**
+```php
+<?php if (isset($_GET['incorrect'])) : ?>
+    <div class="alert alert-warning">
+        Incorrect Email or Password!
+    </div>
+<?php endif; ?>
+```
+
+> Notice: the error is passed as a GET flag (`?incorrect=1`), NOT by exposing why it failed (don't say "wrong password" vs "wrong email" — security best practice).
+
+---
+
+### 5.4 Key Concepts Demonstrated
+
+| Concept | Where in Project | What it Shows |
+|---------|-----------------|---------------|
+| `session_start()` | login.php, profile.php | Must be called before using $_SESSION |
+| `$_SESSION` write | `_actions/login.php` | Storing authenticated user in session |
+| `$_SESSION` read | `profile.php` | Accessing session to verify login |
+| Session guard | `profile.php` top | Redirect unauthenticated users |
+| `header()` redirect | login.php, profile.php | PHP redirect after processing |
+| `exit()` after redirect | `profile.php` | Stops PHP from continuing to run |
+| GET error flag | `index.php?incorrect=1` | Passing simple state via URL |
+| POST form | Login form → `_actions/login.php` | Sending credentials via POST (not GET) |
+| `$_POST` reading | `_actions/login.php` | Receiving form data |
+
+---
+
+### 5.5 Real-World Expansion Ideas
+
+This mini project is a **foundation** — in real apps it would be extended to:
+
+```
+Current Project           →  Real-World Version
+─────────────────────────────────────────────────────────────
+Hardcoded credentials     →  Database lookup (MySQL + PDO)
+Plain text password check →  password_verify() + password_hash()
+Static profile page       →  Dynamic: load from $_SESSION['user']['id']
+Empty register.php        →  Registration form + DB insert
+Empty logout.php          →  session_destroy() + cookie clear
+No roles                  →  $_SESSION['user']['role'] = 'admin'/'user'
+No CSRF protection        →  hidden token field in forms
+No input validation       →  filter_input(), htmlspecialchars()
+```
+
+**What a production login flow looks like:**
+```php
+// login action (production-grade):
+session_start();
+
+$email    = filter_input(INPUT_POST, 'email', FILTER_VALIDATE_EMAIL);
+$password = $_POST['password'] ?? '';
+
+$user = $db->query("SELECT * FROM users WHERE email = ?", [$email])->fetch();
+
+if ($user && password_verify($password, $user['password_hash'])) {
+    session_regenerate_id(true); // prevent session fixation attacks
+    $_SESSION['user'] = [
+        'id'       => $user['id'],
+        'username' => $user['name'],
+        'role'     => $user['role'],
+    ];
+    header('Location: /dashboard');
+} else {
+    header('Location: /login?error=1');
+}
+exit;
+```
+
+---
+
+## 6. References
 
 ### PHP Composer
 - [getcomposer.org — Official Docs](https://getcomposer.org/doc/)
@@ -696,4 +1437,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 - [W3Schools – PHP GET & POST](https://www.w3schools.com/php/php_forms.asp)
 - [PHP Tutorial – Handling Forms](https://www.phptutorial.net/php-tutorial/php-form/)
 - [MDN – HTTP Overview](https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview)
+
+### PHP Cookies
+- [PHP Manual – setcookie()](https://www.php.net/manual/en/function.setcookie.php)
+- [PHP Manual – $_COOKIE](https://www.php.net/manual/en/reserved.variables.cookies.php)
+- [W3Schools – PHP Cookies](https://www.w3schools.com/php/php_cookies.asp)
+- [PHP Tutorial – PHP Cookie](https://www.phptutorial.net/php-tutorial/php-cookie/)
+- [MDN – HTTP Cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies)
+
+### PHP Sessions
+- [PHP Manual – session_start()](https://www.php.net/manual/en/function.session-start.php)
+- [PHP Manual – $_SESSION](https://www.php.net/manual/en/reserved.variables.session.php)
+- [PHP Manual – session_destroy()](https://www.php.net/manual/en/function.session-destroy.php)
+- [W3Schools – PHP Sessions](https://www.w3schools.com/php/php_sessions.asp)
+- [PHP Tutorial – PHP Session](https://www.phptutorial.net/php-tutorial/php-session/)
+- [PHP The Right Way – Sessions](https://phptherightway.com/#sessions)
 

@@ -17,6 +17,18 @@
     <div class="wrap">
         <h1 class="h3 mb-3">Login</h1>
 
+        <?php if( isset($_GET['registered'])) : ?>
+            <div class="alert alert-success">
+                Account created successfully! Please login.
+            </div>
+        <?php endif; ?>
+
+        <?php if (isset($_GET['suspended'])) : ?>
+            <div class="alert alert-danger">
+                Your account has been suspended.
+            </div>
+        <?php endif; ?>
+
         <?php if( isset($_GET['incorrect'])) : ?>
             <div class="alert alert-warning">
                 Incorrect Email or Password!
